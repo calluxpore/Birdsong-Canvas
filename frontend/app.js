@@ -593,6 +593,7 @@
     els.metaNegative.textContent = p.negative_prompt || "(none)";
     const rows = [
       ["Image model", p.model], ["Aspect ratio", p.aspect_ratio], ["Resolution", p.image_size],
+      ["Seed", p.seed !== undefined ? p.seed : 42],
       ["Generation time", `${p.generation_seconds} s`], ["Recognition model", state.audioModelUsed || "—"],
     ];
     if (p.model_notes) rows.push(["Model notes", p.model_notes]);

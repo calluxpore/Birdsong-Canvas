@@ -51,6 +51,7 @@ class Settings:
     audio_model: str = os.getenv("GEMINI_AUDIO_MODEL", "gemini-3.5-flash")
     image_model: str = os.getenv("IMAGE_MODEL", os.getenv("GEMINI_IMAGE_MODEL", "fal-ai/fast-sdxl"))
     min_confidence: float = float(os.getenv("MIN_CONFIDENCE", "0.60"))
+    generation_seed: int = int(os.getenv("GENERATION_SEED", "42"))
     max_audio_bytes: int = int(os.getenv("MAX_AUDIO_MB", "15")) * 1024 * 1024
     cors_origins: list[str] = [
         o.strip()
@@ -118,6 +119,7 @@ class GenerateRequest(BaseModel):
     model: str | None = Field(default=None, max_length=100)
     aspect_ratio: AspectRatio = "1:1"
     image_size: ImageSize = "1K"
+    seed: int | None = Field(default=None)
 
 
 AUDIO_SYSTEM_PROMPT = """\
@@ -260,6 +262,7 @@ async def generate_fal_image(
     model: str,
     aspect_ratio: str,
     fal_key: str,
+    seed: int = 42,
 ) -> tuple[bytes, str]:
     if not fal_key:
         raise ApiError(401, "NO_FAL_KEY", "No Fal.ai API key. Paste your Fal.ai key in the API key panel.")
@@ -284,6 +287,7 @@ async def generate_fal_image(
         "image_size": dims,
         "num_images": 1,
         "enable_safety_checker": True,
+        "seed": seed,
     }
     if negative_prompt:
         payload["negative_prompt"] = negative_prompt
@@ -425,7 +429,8 @@ async def identify_bird(client: genai.Client, model: str, audio: bytes, mime_typ
                 system_instruction=AUDIO_SYSTEM_PROMPT,
                 response_mime_type="application/json",
                 response_schema=BirdIdentification,
-                temperature=0.2,
+                temperature=0.0,
+                seed=settings.generation_seed,
             ),
         )
     except Exception as exc:
@@ -499,8 +504,9 @@ async def api_generate(
     model = (req.model or "").strip() or settings.image_model
     prompt = compose_image_prompt(req)
     fal_key = (x_fal_api_key or "").strip() or settings.fal_api_key
+    seed = req.seed if req.seed is not None else settings.generation_seed
 
-    log.info("Generating image with %s (%s, %s)", model, req.aspect_ratio, req.image_size)
+    log.info("Generating image with %s (%s, %s, seed=%s)", model, req.aspect_ratio, req.image_size, seed)
     t0 = time.perf_counter()
     image_bytes = None
     mime = "image/png"
@@ -513,6 +519,7 @@ async def api_generate(
             model=model if (model.startswith("fal-") or model.startswith("fal/")) else "fal-ai/fast-sdxl",
             aspect_ratio=req.aspect_ratio,
             fal_key=fal_key,
+            seed=seed,
         )
     else:
         client = get_client(x_gemini_api_key)
@@ -525,6 +532,7 @@ async def api_generate(
                         number_of_images=1,
                         aspect_ratio=req.aspect_ratio,
                         output_mime_type="image/png",
+                        seed=seed,
                     ),
                 )
                 if res.generated_images:
@@ -536,6 +544,7 @@ async def api_generate(
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE"],
                         image_config=types.ImageConfig(aspect_ratio=req.aspect_ratio),
+                        seed=seed,
                     ),
                 )
                 candidate = (response.candidates or [None])[0]
@@ -565,6 +574,7 @@ async def api_generate(
             "model": model,
             "aspect_ratio": req.aspect_ratio,
             "image_size": req.image_size,
+            "seed": seed,
             "generation_seconds": round(elapsed, 1),
             "model_notes": " ".join(text_parts)[:500],
         },
