@@ -1,5 +1,5 @@
-/* Birdsong Canvas — frontend controller
- * Mic capture + visualizer → WAV → /api/identify (Gemini audio) → /api/generate (Fal.ai / Gemini image)
+/* Birdsong Canvas — Frontend Application Controller
+ * Bioacoustic Audio Capture & Identification + Photorealistic Wildlife Art Generation
  */
 (() => {
   "use strict";
@@ -9,7 +9,18 @@
   const $ = (id) => document.getElementById(id);
 
   const els = {
+    // Views
+    viewHome: $("view-home"),
+    viewRecordings: $("view-recordings"),
+    viewLibrary: $("view-library"),
+    navHome: $("nav-home"),
+    navRecordings: $("nav-recordings"),
+    navLibrary: $("nav-library"),
+    navSettings: $("nav-settings"),
+
+    // Studio Canvas & Audio Player
     canvas: $("visualizer"),
+    playhead: $("visualizer-playhead"),
     recBadge: $("rec-badge"),
     recTimer: $("rec-timer"),
     recProgress: $("rec-progress"),
@@ -17,35 +28,71 @@
     btnRecordIcon: $("btn-record-icon"),
     btnRecordLabel: $("btn-record-label"),
     duration: $("duration"),
+    durationDisplay: $("duration-display"),
+    badgeDuration: $("badge-duration"),
     fileInput: $("file-input"),
     playback: $("playback"),
+    btnPlayerPlay: $("btn-player-play"),
+    iconPlayerPlay: $("icon-player-play"),
+    iconPlayerPause: $("icon-player-pause"),
+    playerTime: $("player-time"),
+    playerSeek: $("player-seek"),
+    btnPlayerVolume: $("btn-player-volume"),
     statusText: $("status-text"),
+
+    // Results Card
     results: $("results"),
-    lowConf: $("low-conf"),
+    speciesThumb: $("species-thumb"),
+    speciesThumbPlaceholder: $("species-thumb-placeholder"),
     resCommon: $("res-common"),
     resScientific: $("res-scientific"),
     resConfLabel: $("res-conf-label"),
     resConfBar: $("res-conf-bar"),
-    resConfThreshold: $("res-conf-threshold"),
     resHabitat: $("res-habitat"),
     resVisual: $("res-visual"),
+    lowConf: $("low-conf"),
     btnForce: $("btn-force-generate"),
+
+    // Visual Art Card
+    imageFrame: $("image-frame"),
     imageEmpty: $("image-empty"),
     imageLoading: $("image-loading"),
     genTimer: $("gen-timer"),
-    image: $("bird-image"),
+    birdImage: $("bird-image"),
     btnRegenerate: $("btn-regenerate"),
     btnDownload: $("btn-download"),
+    btnTabImage: $("btn-tab-image"),
+    btnTabArt: $("btn-tab-art"),
+
+    // Generation Metadata Card
+    metadataCard: $("metadata-card"),
     metaPrompt: $("meta-prompt"),
     metaNegative: $("meta-negative"),
-    metaParams: $("meta-params"),
-    btnThemeToggle: $("btn-theme-toggle"),
-    iconSun: $("icon-sun"),
-    iconMoon: $("icon-moon"),
-    keyToggle: $("btn-key-toggle"),
+    metaImageModel: $("meta-image-model"),
+    metaAspectRatio: $("meta-aspect-ratio"),
+    metaResolution: $("meta-resolution"),
+    metaGenTime: $("meta-gen-time"),
+    metaRecModel: $("meta-rec-model"),
+    btnCopyAll: $("btn-copy-all"),
+    btnCopyAllLabel: $("btn-copy-all-label"),
+    btnCopyNeg: $("btn-copy-neg"),
+
+    // Recordings View
+    recordingsContainer: $("recordings-container"),
+    recordingsEmpty: $("recordings-empty"),
+    btnRefreshRecordings: $("btn-refresh-recordings"),
+
+    // Library View
+    libraryContainer: $("library-container"),
+    libraryEmpty: $("library-empty"),
+    btnRefreshLibrary: $("btn-refresh-library"),
+
+    // Settings Modal
+    btnSettingsToggle: $("btn-settings-toggle"),
+    settingsModal: $("settings-modal"),
+    btnSettingsClose: $("btn-settings-close"),
     keyDot: $("key-dot"),
     keyPillLabel: $("key-pill-label"),
-    keyPanel: $("key-panel"),
     keyInput: $("api-key"),
     keyReveal: $("btn-key-reveal"),
     falKeyInput: $("fal-key"),
@@ -58,166 +105,143 @@
     imageModel: $("image-model"),
     aspectRatio: $("aspect-ratio"),
     imageSize: $("image-size"),
+
+    // Alert
     alert: $("alert"),
     alertIcon: $("alert-icon"),
     alertTitle: $("alert-title"),
     alertMessage: $("alert-message"),
+    alertClose: $("alert-close"),
   };
 
   const state = {
+    currentView: "home",
     busy: false,
-    recording: null,        // active recording session
-    identification: null,   // last Gemini result
-    lastImage: null,        // { image_url, parameters }
-    staticWave: null,       // Float32Array for idle waveform display
+    recording: null,
+    identification: null,
+    lastImage: null,
+    currentAudioUrl: null,
+    currentAudioBlob: null,
+    audioModelUsed: null,
+    staticWave: null,
+    isPlaying: false,
   };
 
-  // ------------------------------------------------------------------ Theme Manager
-  const THEME_KEY = "birdsong.theme";
-  const themeManager = {
-    init() {
-      const savedTheme = localStorage.getItem(THEME_KEY);
-      if (savedTheme === "dark" || (!savedTheme && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-        this.setTheme("dark");
-      } else if (savedTheme === "light") {
-        this.setTheme("light");
-      } else {
-        this.setTheme("dark"); // default dark
-      }
+  // ------------------------------------------------------------------ View Navigation
+  function showView(name) {
+    state.currentView = name;
+    els.viewHome.classList.toggle("hidden", name !== "home");
+    els.viewRecordings.classList.toggle("hidden", name !== "recordings");
+    els.viewLibrary.classList.toggle("hidden", name !== "library");
 
-      if (els.btnThemeToggle) {
-        els.btnThemeToggle.addEventListener("click", () => {
-          const isDark = document.documentElement.classList.contains("dark");
-          this.setTheme(isDark ? "light" : "dark");
-        });
-      }
-    },
-    setTheme(theme) {
-      if (theme === "dark") {
-        document.documentElement.classList.add("dark");
+    const navItems = [
+      { id: els.navHome, active: name === "home" },
+      { id: els.navRecordings, active: name === "recordings" },
+      { id: els.navLibrary, active: name === "library" },
+    ];
+
+    navItems.forEach(({ id, active }) => {
+      if (!id) return;
+      if (active) {
+        id.className = "nav-btn flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-950/70 to-emerald-900/40 border border-canvas-mint/30 text-canvas-mint font-medium text-xs shadow-[0_0_15px_rgba(74,222,128,0.15)] transition";
       } else {
-        document.documentElement.classList.remove("dark");
+        id.className = "nav-btn flex items-center gap-3 px-4 py-2.5 rounded-2xl text-stone-400 hover:text-white hover:bg-white/[0.04] transition font-medium text-xs";
       }
-      try {
-        localStorage.setItem(THEME_KEY, theme);
-      } catch (e) {
-        console.warn("Could not save theme preference:", e);
-      }
-      if (els.btnThemeToggle) {
-        els.btnThemeToggle.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
-      }
-      if (!state.recording) drawIdle();
-    },
-    isDark() {
-      return document.documentElement.classList.contains("dark");
+    });
+
+    if (name === "recordings") loadRecordings();
+    if (name === "library") loadLibrary();
+    if (name === "home") sizeCanvas();
+  }
+
+  els.navHome.addEventListener("click", (e) => { e.preventDefault(); showView("home"); });
+  els.navRecordings.addEventListener("click", (e) => { e.preventDefault(); showView("recordings"); });
+  els.navLibrary.addEventListener("click", (e) => { e.preventDefault(); showView("library"); });
+  els.btnRefreshRecordings.addEventListener("click", () => loadRecordings());
+  els.btnRefreshLibrary.addEventListener("click", () => loadLibrary());
+
+  // ------------------------------------------------------------------ Alert Helpers
+  let alertTimer;
+  function showAlert(title, message, kind = "error") {
+    const styles = {
+      error: ["⛔", "bg-red-950/90 border-red-500/30 text-red-200"],
+      warn: ["⚠️", "bg-amber-950/90 border-amber-500/30 text-amber-200"],
+      info: ["✨", "bg-emerald-950/90 border-emerald-500/30 text-emerald-200"],
+    }[kind] || ["✨", "bg-stone-900/90 border-white/10 text-stone-200"];
+
+    els.alert.className = `fixed top-5 left-1/2 -translate-x-1/2 z-50 w-[min(94vw,560px)] rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-xl transition-all duration-300 ${styles[1]}`;
+    els.alertIcon.textContent = styles[0];
+    els.alertTitle.textContent = title;
+    els.alertMessage.textContent = message;
+    els.alert.classList.remove("hidden");
+    clearTimeout(alertTimer);
+    if (kind !== "error") alertTimer = setTimeout(hideAlert, 6000);
+  }
+  function hideAlert() {
+    els.alert.classList.add("hidden");
+  }
+  if (els.alertClose) els.alertClose.addEventListener("click", hideAlert);
+
+  class ApiError extends Error {
+    constructor(code, message) {
+      super(message);
+      this.code = code;
     }
-  };
+  }
 
-  // ------------------------------------------------------------------ UI helpers
+  // ------------------------------------------------------------------ Pipeline Stepper
   const STEPS = ["listening", "analyzing", "generating", "complete"];
-
   function setStep(active, { error = false } = {}) {
     const idx = STEPS.indexOf(active);
     document.querySelectorAll("#pipeline .step").forEach((li) => {
-      const i = STEPS.indexOf(li.dataset.step);
-      let s = "idle";
-      if (idx === -1) s = "idle";
-      else if (i < idx) s = "done";
-      else if (i === idx) s = error ? "error" : active === "complete" ? "done" : "active";
-      li.dataset.state = s;
+      const stepName = li.dataset.step;
+      const i = STEPS.indexOf(stepName);
+      const icon = li.querySelector("div");
+      const label = li.querySelector("span");
+
+      if (idx === -1) {
+        li.className = "step flex items-center gap-1.5 text-stone-500";
+        icon.className = "w-4 h-4 rounded-full bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-[10px] text-stone-500";
+        icon.textContent = "○";
+        label.className = "font-medium text-stone-500";
+      } else if (i < idx || (active === "complete" && !error)) {
+        li.className = "step flex items-center gap-1.5 text-canvas-mint";
+        icon.className = "w-4 h-4 rounded-full bg-canvas-mint/20 border border-canvas-mint flex items-center justify-center text-[10px] text-canvas-mint font-bold shadow-[0_0_8px_rgba(74,222,128,0.3)]";
+        icon.textContent = "✓";
+        label.className = "font-medium text-stone-200";
+      } else if (i === idx) {
+        if (error) {
+          li.className = "step flex items-center gap-1.5 text-red-400";
+          icon.className = "w-4 h-4 rounded-full bg-red-500/20 border border-red-400 flex items-center justify-center text-[10px] text-red-400 font-bold";
+          icon.textContent = "✕";
+          label.className = "font-medium text-red-300";
+        } else {
+          li.className = "step flex items-center gap-1.5 text-canvas-mint animate-pulse";
+          icon.className = "w-4 h-4 rounded-full bg-canvas-mint/30 border border-canvas-mint flex items-center justify-center text-[10px] text-canvas-mint font-bold";
+          icon.textContent = "●";
+          label.className = "font-bold text-white";
+        }
+      } else {
+        li.className = "step flex items-center gap-1.5 text-stone-600";
+        icon.className = "w-4 h-4 rounded-full bg-white/[0.03] border border-white/[0.06] flex items-center justify-center text-[10px] text-stone-600";
+        icon.textContent = "○";
+        label.className = "font-normal text-stone-500";
+      }
     });
   }
 
-  function setStatus(text) { els.statusText.textContent = text; }
+  function setStatus(text) {
+    if (els.statusText) els.statusText.textContent = text;
+  }
 
   function setBusy(busy) {
     state.busy = busy;
     els.btnRecord.disabled = busy && !state.recording;
     els.fileInput.disabled = busy;
     els.duration.disabled = busy;
-    els.btnForce.disabled = busy;
+    if (els.btnForce) els.btnForce.disabled = busy;
     els.btnRegenerate.disabled = busy || !state.identification?.image_prompt;
     els.btnDownload.disabled = busy || !state.lastImage;
-  }
-
-  let alertTimer;
-  function showAlert(title, message, kind = "error") {
-    const styles = {
-      error: ["⛔", "bg-red-950/90 border-red-500/30 text-red-100"],
-      warn: ["⚠️", "bg-amber-950/90 border-amber-500/30 text-amber-100"],
-      info: ["ℹ️", "bg-stone-900/90 border-white/10 text-stone-100"],
-    }[kind];
-    els.alert.className = `fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[min(92vw,640px)] rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur ${styles[1]}`;
-    els.alertIcon.textContent = styles[0];
-    els.alertTitle.textContent = title;
-    els.alertMessage.textContent = message;
-    clearTimeout(alertTimer);
-    if (kind !== "error") alertTimer = setTimeout(hideAlert, 7000);
-  }
-  function hideAlert() { els.alert.classList.add("hidden"); }
-  $("alert-close").addEventListener("click", hideAlert);
-
-  const ERROR_TITLES = {
-    NO_API_KEY: "Gemini API key missing",
-    INVALID_API_KEY: "Invalid API key",
-    QUOTA_ZERO: "No quota for this model",
-    RATE_LIMITED: "Rate limited",
-    MODEL_NOT_FOUND: "Model not available",
-    NO_IMAGE: "No image returned",
-    GEMINI_ERROR: "Gemini request failed",
-    UNSUPPORTED_AUDIO: "Unsupported audio format",
-    AUDIO_TOO_LARGE: "Audio file too large",
-  };
-
-  class ApiError extends Error {
-    constructor(code, message) { super(message); this.code = code; }
-  }
-
-  async function api(path, options = {}) {
-    let res;
-    const headers = new Headers(options.headers || {});
-    const key = keyStore.get();
-    if (key) {
-      try {
-        headers.set("X-Gemini-Api-Key", key);
-      } catch (e) {
-        console.warn("Could not set X-Gemini-Api-Key header:", e);
-      }
-    }
-    const falKey = keyStore.getFal();
-    if (falKey) {
-      try {
-        headers.set("X-Fal-Api-Key", falKey);
-      } catch (e) {
-        console.warn("Could not set X-Fal-Api-Key header:", e);
-      }
-    }
-    try {
-      res = await fetch(API + path, { ...options, headers });
-    } catch (err) {
-      if (err instanceof DOMException || err.name === "TypeError") {
-        throw new ApiError("REQUEST_FAILED", err.message || "Failed to make request.");
-      }
-      throw new ApiError("BACKEND_UNREACHABLE", "Could not reach the backend server. Start it with: .venv\\Scripts\\python -m uvicorn main:app --port 8000 — then open http://127.0.0.1:8000");
-    }
-    const body = await res.json().catch(() => null);
-    if (!res.ok) {
-      const err = body?.error;
-      const detail = err?.message || (Array.isArray(body?.detail) ? body.detail.map((d) => d.msg).join("; ") : body?.detail);
-      throw new ApiError(err?.code || `HTTP_${res.status}`, detail || `Request failed with HTTP ${res.status}`);
-    }
-    return body;
-  }
-
-  function reportError(err, step) {
-    console.error(err);
-    setStep(step, { error: true });
-    setStatus(err.message);
-    showAlert(ERROR_TITLES[err.code] || (err.code === "BACKEND_UNREACHABLE" ? "Backend offline" : "Something went wrong"), err.message);
-    if (err.code === "NO_API_KEY" || err.code === "INVALID_API_KEY") {
-      setKeyIndicator(false, err.code === "NO_API_KEY" ? "No API key" : "Invalid key");
-      openKeyPanel(true);
-    }
   }
 
   // ------------------------------------------------------------------ Visualizer
@@ -225,84 +249,185 @@
 
   function sizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
-    const { width, height } = els.canvas.getBoundingClientRect();
-    els.canvas.width = Math.round(width * dpr);
-    els.canvas.height = Math.round(height * dpr);
+    const rect = els.canvas.getBoundingClientRect();
+    els.canvas.width = Math.round(rect.width * dpr);
+    els.canvas.height = Math.round(rect.height * dpr);
     ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (!state.recording) drawIdle();
+    drawWaveform();
   }
 
-  function drawIdle() {
-    const w = els.canvas.clientWidth, h = els.canvas.clientHeight;
+  function drawWaveform() {
+    if (state.recording) return;
+    const w = els.canvas.clientWidth;
+    const h = els.canvas.clientHeight;
     ctx2d.clearRect(0, 0, w, h);
+
     const wave = state.staticWave;
-    const isDark = themeManager.isDark();
-    
-    ctx2d.strokeStyle = wave 
-      ? (isDark ? "rgba(117, 168, 117, 0.85)" : "rgba(62, 111, 62, 0.85)") 
-      : (isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.1)");
-    ctx2d.lineWidth = 1.25;
-    ctx2d.beginPath();
-    if (!wave) {
-      ctx2d.moveTo(0, h / 2); ctx2d.lineTo(w, h / 2);
-    } else {
-      // min/max envelope per pixel column
-      const per = Math.max(1, Math.floor(wave.length / w));
-      for (let x = 0; x < w; x++) {
-        let min = 1, max = -1;
-        const start = x * per;
-        for (let i = start; i < start + per && i < wave.length; i++) {
-          if (wave[i] < min) min = wave[i];
-          if (wave[i] > max) max = wave[i];
-        }
-        ctx2d.moveTo(x + 0.5, h / 2 - max * h * 0.45);
-        ctx2d.lineTo(x + 0.5, h / 2 - min * h * 0.45);
+    const barCount = 76;
+    const barW = Math.max(2, (w / barCount) - 2);
+    const cy = h / 2;
+
+    if (!wave || !wave.length) {
+      // Gentle calm idle bars
+      for (let b = 0; b < barCount; b++) {
+        const x = b * (w / barCount) + 1;
+        const bh = 4;
+        ctx2d.fillStyle = "rgba(74, 222, 128, 0.25)";
+        ctx2d.beginPath();
+        ctx2d.roundRect(x, cy - bh / 2, barW, bh, 2);
+        ctx2d.fill();
       }
+      ctx2d.strokeStyle = "rgba(74, 222, 128, 0.15)";
+      ctx2d.lineWidth = 1;
+      ctx2d.beginPath();
+      ctx2d.moveTo(0, cy);
+      ctx2d.lineTo(w, cy);
+      ctx2d.stroke();
+      return;
     }
+
+    for (let b = 0; b < barCount; b++) {
+      const x = b * (w / barCount) + 1;
+      const idx = Math.floor((b / barCount) * wave.length);
+      const amp = Math.min(1, Math.abs(wave[idx]) * 1.9);
+      const bh = Math.max(3, amp * (h * 0.8));
+
+      const grad = ctx2d.createLinearGradient(0, cy - bh / 2, 0, cy + bh / 2);
+      grad.addColorStop(0, "rgba(74, 222, 128, 0.95)");
+      grad.addColorStop(0.5, "rgba(45, 212, 191, 0.85)");
+      grad.addColorStop(1, "rgba(34, 197, 94, 0.95)");
+
+      ctx2d.fillStyle = grad;
+      ctx2d.beginPath();
+      ctx2d.roundRect(x, cy - bh / 2, barW, bh, 2);
+      ctx2d.fill();
+    }
+
+    ctx2d.strokeStyle = "rgba(74, 222, 128, 0.25)";
+    ctx2d.lineWidth = 1;
+    ctx2d.beginPath();
+    ctx2d.moveTo(0, cy);
+    ctx2d.lineTo(w, cy);
     ctx2d.stroke();
   }
 
   function drawLive(analyser, freqData, timeData) {
-    const w = els.canvas.clientWidth, h = els.canvas.clientHeight;
+    const w = els.canvas.clientWidth;
+    const h = els.canvas.clientHeight;
     analyser.getByteFrequencyData(freqData);
     analyser.getByteTimeDomainData(timeData);
     ctx2d.clearRect(0, 0, w, h);
-    const isDark = themeManager.isDark();
 
-    // Frequency bars (log-ish distribution; birdsong mostly 1–8 kHz)
-    const bars = Math.min(96, Math.floor(w / 6));
-    const barW = w / bars;
+    const bars = Math.min(76, Math.floor(w / 5));
+    const barW = Math.max(2, (w / bars) - 2);
+    const cy = h / 2;
     const maxBin = freqData.length;
+
     for (let b = 0; b < bars; b++) {
-      const lo = Math.floor(Math.pow(b / bars, 1.6) * maxBin);
-      const hi = Math.max(lo + 1, Math.floor(Math.pow((b + 1) / bars, 1.6) * maxBin));
+      const lo = Math.floor(Math.pow(b / bars, 1.5) * maxBin);
+      const hi = Math.max(lo + 1, Math.floor(Math.pow((b + 1) / bars, 1.5) * maxBin));
       let sum = 0;
       for (let i = lo; i < hi; i++) sum += freqData[i];
       const v = sum / (hi - lo) / 255;
-      const bh = Math.max(2, v * h * 0.9);
-      
-      if (isDark) {
-        ctx2d.fillStyle = `rgba(${Math.round(84 + 60 * v)},${Math.round(140 + 60 * v)},${Math.round(84 + 40 * v)},${0.35 + 0.65 * v})`;
-      } else {
-        ctx2d.fillStyle = `rgba(${Math.round(62 + 40 * v)},${Math.round(111 + 40 * v)},${Math.round(62 + 30 * v)},${0.4 + 0.6 * v})`;
-      }
-      ctx2d.fillRect(b * barW + 1, h - bh, barW - 2, bh);
-    }
+      const bh = Math.max(4, v * (h * 0.85));
+      const x = b * (w / bars) + 1;
 
-    // Waveform overlay
-    ctx2d.strokeStyle = isDark ? "rgba(227, 238, 227, 0.65)" : "rgba(40, 65, 45, 0.65)";
-    ctx2d.lineWidth = 1.35;
-    ctx2d.beginPath();
-    for (let i = 0; i < timeData.length; i++) {
-      const x = (i / (timeData.length - 1)) * w;
-      const y = (timeData[i] / 255) * h;
-      i ? ctx2d.lineTo(x, y) : ctx2d.moveTo(x, y);
+      const grad = ctx2d.createLinearGradient(0, cy - bh / 2, 0, cy + bh / 2);
+      grad.addColorStop(0, "rgba(74, 222, 128, 1)");
+      grad.addColorStop(0.5, "rgba(45, 212, 191, 0.9)");
+      grad.addColorStop(1, "rgba(34, 197, 94, 1)");
+
+      ctx2d.fillStyle = grad;
+      ctx2d.beginPath();
+      ctx2d.roundRect(x, cy - bh / 2, barW, bh, 2);
+      ctx2d.fill();
     }
-    ctx2d.stroke();
   }
 
-  // ------------------------------------------------------------------ Recording
-  // AudioWorklet that forwards raw PCM (mono) to the main thread.
+  // ------------------------------------------------------------------ Audio Player
+  function formatTime(sec) {
+    if (isNaN(sec) || !isFinite(sec)) return "0:00";
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+
+  function updatePlayerUI() {
+    const audio = els.playback;
+    const cur = audio.currentTime || 0;
+    const dur = audio.duration || 0;
+    els.playerTime.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+    const pct = dur > 0 ? (cur / dur) * 100 : 0;
+    els.playerSeek.value = pct;
+    if (els.playhead) {
+      if (dur > 0) {
+        els.playhead.classList.remove("hidden");
+        els.playhead.style.left = `${Math.min(99, Math.max(0, pct))}%`;
+      } else {
+        els.playhead.classList.add("hidden");
+      }
+    }
+  }
+
+  function togglePlay() {
+    const audio = els.playback;
+    if (!audio.src) return;
+    if (audio.paused) {
+      audio.play().then(() => {
+        state.isPlaying = true;
+        els.iconPlayerPlay.classList.add("hidden");
+        els.iconPlayerPause.classList.remove("hidden");
+      }).catch((e) => console.warn("Play error:", e));
+    } else {
+      audio.pause();
+      state.isPlaying = false;
+      els.iconPlayerPlay.classList.remove("hidden");
+      els.iconPlayerPause.classList.add("hidden");
+    }
+  }
+
+  els.btnPlayerPlay.addEventListener("click", togglePlay);
+  els.playback.addEventListener("timeupdate", updatePlayerUI);
+  els.playback.addEventListener("loadedmetadata", updatePlayerUI);
+  els.playback.addEventListener("ended", () => {
+    state.isPlaying = false;
+    els.iconPlayerPlay.classList.remove("hidden");
+    els.iconPlayerPause.classList.add("hidden");
+    updatePlayerUI();
+  });
+  els.playerSeek.addEventListener("input", (e) => {
+    const audio = els.playback;
+    const dur = audio.duration || 0;
+    if (dur > 0) {
+      audio.currentTime = (e.target.value / 100) * dur;
+      updatePlayerUI();
+    }
+  });
+  els.btnPlayerVolume.addEventListener("click", () => {
+    els.playback.muted = !els.playback.muted;
+    els.btnPlayerVolume.classList.toggle("opacity-50", els.playback.muted);
+  });
+
+  // Duration selection sync
+  els.duration.addEventListener("change", (e) => {
+    const val = e.target.value;
+    els.durationDisplay.textContent = `${val}s`;
+    els.badgeDuration.textContent = `${val}s ∿`;
+  });
+
+  // ------------------------------------------------------------------ Image vs Art Tabs
+  els.btnTabImage.addEventListener("click", () => {
+    els.btnTabImage.className = "flex items-center gap-1.5 px-3 py-1 rounded-lg bg-canvas-mint text-[#08150e] font-semibold shadow-sm transition";
+    els.btnTabArt.className = "flex items-center gap-1.5 px-3 py-1 rounded-lg text-stone-400 hover:text-white transition";
+    els.birdImage.style.filter = "none";
+  });
+  els.btnTabArt.addEventListener("click", () => {
+    els.btnTabArt.className = "flex items-center gap-1.5 px-3 py-1 rounded-lg bg-canvas-mint text-[#08150e] font-semibold shadow-sm transition";
+    els.btnTabImage.className = "flex items-center gap-1.5 px-3 py-1 rounded-lg text-stone-400 hover:text-white transition";
+    els.birdImage.style.filter = "contrast(1.15) saturate(1.25) brightness(0.95)";
+  });
+
+  // ------------------------------------------------------------------ Audio Recording
   const RECORDER_WORKLET = `
     class PcmTap extends AudioWorkletProcessor {
       process(inputs) {
@@ -323,19 +448,16 @@
 
   async function startRecording() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      showAlert("Microphone unavailable", "This browser does not support microphone capture. Use a modern browser on http://localhost or HTTPS.");
+      showAlert("Microphone unavailable", "Microphone access is only supported on localhost or HTTPS.", "warn");
       return;
     }
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        // Disable voice processing: it suppresses high-pitched birdsong.
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
       });
     } catch (err) {
-      showAlert("Microphone access denied", err.name === "NotAllowedError"
-        ? "Allow microphone access in your browser's site settings, then try again."
-        : `Could not open the microphone: ${err.message}`);
+      showAlert("Microphone denied", err.name === "NotAllowedError" ? "Allow microphone permission in browser settings." : err.message);
       return;
     }
 
@@ -357,7 +479,7 @@
     const chunks = [];
     tap.port.onmessage = (e) => chunks.push(e.data);
 
-    const seconds = Number(els.duration.value);
+    const seconds = Number(els.duration.value) || 8;
     const rec = { stream, audioCtx, chunks, seconds, startedAt: performance.now(), raf: 0, timeout: 0 };
     state.recording = rec;
     state.staticWave = null;
@@ -374,15 +496,13 @@
     loop();
     rec.timeout = setTimeout(() => stopRecording(), seconds * 1000);
 
-    resetResults();
     setBusy(true);
     els.btnRecord.disabled = false;
-    els.btnRecordIcon.textContent = "⏹️";
+    els.btnRecordIcon.textContent = "⏹";
     els.btnRecordLabel.textContent = "Stop & Analyze";
     els.recBadge.classList.remove("hidden");
-    els.playback.classList.add("hidden");
     setStep("listening");
-    setStatus(`Listening for ${seconds} seconds… keep the microphone pointed at the bird.`);
+    setStatus(`Listening for ${seconds} seconds… keep the microphone pointed toward the bird.`);
   }
 
   async function stopRecording() {
@@ -396,25 +516,25 @@
     await rec.audioCtx.close();
 
     els.recBadge.classList.add("hidden");
-    els.recProgress.style.width = "0";
-    els.btnRecordIcon.textContent = "🎙️";
+    els.recProgress.style.width = "0%";
+    els.btnRecordIcon.textContent = "🎙";
     els.btnRecordLabel.textContent = "Record / Listen";
 
     const pcm = concatFloat32(rec.chunks);
     const durationSec = pcm.length / sampleRate;
-    if (durationSec < 1.5) {
+    if (durationSec < 1.2) {
       setBusy(false);
       setStep("listening", { error: true });
-      setStatus("Recording was too short. Record at least 5 seconds.");
-      drawIdle();
+      setStatus("Recording was too short. Record at least 3 seconds.");
+      drawWaveform();
       return;
     }
     normalize(pcm);
     state.staticWave = pcm;
-    drawIdle();
+    drawWaveform();
 
     const wav = encodeWav(pcm, sampleRate);
-    setPlayback(wav);
+    setAudioPlayback(wav);
     await analyze(wav, "recording.wav");
   }
 
@@ -426,7 +546,6 @@
     return out;
   }
 
-  // Peak-normalize to -1 dBFS so quiet distant birds are audible to the model.
   function normalize(pcm) {
     let peak = 0;
     for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
@@ -435,7 +554,6 @@
     for (let i = 0; i < pcm.length; i++) pcm[i] *= gain;
   }
 
-  // 16-bit PCM mono WAV
   function encodeWav(samples, sampleRate) {
     const buffer = new ArrayBuffer(44 + samples.length * 2);
     const v = new DataView(buffer);
@@ -453,53 +571,81 @@
     return new Blob([buffer], { type: "audio/wav" });
   }
 
-  function setPlayback(blob) {
-    if (els.playback.src) URL.revokeObjectURL(els.playback.src);
-    els.playback.src = URL.createObjectURL(blob);
-    els.playback.classList.remove("hidden");
+  function setAudioPlayback(blobOrUrl) {
+    if (typeof blobOrUrl === "string") {
+      els.playback.src = blobOrUrl;
+      state.currentAudioUrl = blobOrUrl;
+    } else {
+      if (els.playback.src && els.playback.src.startsWith("blob:")) {
+        URL.revokeObjectURL(els.playback.src);
+      }
+      const url = URL.createObjectURL(blobOrUrl);
+      els.playback.src = url;
+      state.currentAudioBlob = blobOrUrl;
+    }
+    els.playback.load();
+    els.btnPlayerPlay.disabled = false;
+    els.btnPlayerPlay.className = "w-9 h-9 rounded-full bg-canvas-mint hover:bg-emerald-400 text-[#07130c] flex items-center justify-center shadow-[0_0_12px_rgba(74,222,128,0.3)] transition active:scale-95 shrink-0 cursor-pointer";
+    updatePlayerUI();
   }
 
-  // ------------------------------------------------------------------ Upload
+  // ------------------------------------------------------------------ Upload Audio
   async function handleUpload(file) {
     if (!file) return;
     if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-      showAlert("Audio file too large", `Please upload a clip under ${MAX_UPLOAD_MB} MB (5–30 seconds is ideal).`);
+      showAlert("File too large", `Please upload an audio file under ${MAX_UPLOAD_MB} MB.`, "warn");
       return;
     }
-    resetResults();
-    setPlayback(file);
+    setAudioPlayback(file);
     setStep("listening");
-    setStatus(`Loaded ${file.name}`);
+    setStatus(`Uploaded ${file.name}`);
     try {
       const ac = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 1, 44100);
       const buf = await ac.decodeAudioData(await file.arrayBuffer());
       state.staticWave = buf.getChannelData(0);
     } catch {
-      state.staticWave = null; // preview only; the backend still receives the original file
+      state.staticWave = null;
     }
-    drawIdle();
+    drawWaveform();
     await analyze(file, file.name);
   }
 
-  // ------------------------------------------------------------------ Pipeline
-  function resetResults() {
-    state.identification = null;
-    els.results.classList.add("hidden");
-    els.lowConf.classList.add("hidden");
-    els.btnForce.classList.add("hidden");
-    setBusy(state.busy);
+  // ------------------------------------------------------------------ API Calls
+  async function api(path, options = {}) {
+    const headers = new Headers(options.headers || {});
+    const key = keyStore.get();
+    if (key) headers.set("X-Gemini-Api-Key", key);
+    const falKey = keyStore.getFal();
+    if (falKey) headers.set("X-Fal-Api-Key", falKey);
+
+    let res;
+    try {
+      res = await fetch(API + path, { ...options, headers });
+    } catch (err) {
+      throw new ApiError("BACKEND_UNREACHABLE", "Could not reach the server backend.");
+    }
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = body?.error;
+      const detail = err?.message || (Array.isArray(body?.detail) ? body.detail.map((d) => d.msg).join("; ") : body?.detail);
+      throw new ApiError(err?.code || `HTTP_${res.status}`, detail || `Request failed with HTTP ${res.status}`);
+    }
+    return body;
   }
 
   async function analyze(blob, filename) {
     setBusy(true);
     setStep("analyzing");
-    setStatus("Analyzing audio with Gemini…");
+    setStatus("Analyzing bioacoustics with Gemini multimodal audio…");
     try {
       const form = new FormData();
       form.append("audio", blob, filename);
       if (els.audioModel.value) form.append("model", els.audioModel.value);
       const data = await api("/api/identify", { method: "POST", body: form });
       state.audioModelUsed = data.model;
+      if (data.audio_record?.url) {
+        state.currentAudioUrl = data.audio_record.url;
+      }
       renderIdentification(data);
 
       if (data.status === "ok") {
@@ -507,7 +653,7 @@
       } else {
         setStep("analyzing", { error: true });
         setStatus(data.message);
-        showAlert(data.status === "no_bird" ? "No bird detected" : "Low confidence — please re-record", data.message, "warn");
+        showAlert(data.status === "no_bird" ? "No bird detected" : "Low confidence recording", data.message, "warn");
       }
     } catch (err) {
       reportError(err, "analyzing");
@@ -526,9 +672,6 @@
     els.resScientific.textContent = identified ? result.scientific_name : "—";
     els.resConfLabel.textContent = `${pct}%`;
     els.resConfBar.style.width = `${pct}%`;
-    els.resConfBar.className = `h-full rounded-full transition-all duration-700 ${
-      pct >= min_confidence * 100 ? "bg-pastel-sage-500 dark:bg-pastel-sage-400" : pct >= 35 ? "bg-amber-400" : "bg-red-400"}`;
-    els.resConfThreshold.style.left = `${min_confidence * 100}%`;
     els.resHabitat.textContent = result.habitat_description || "—";
     els.resVisual.textContent = result.visual_description || "—";
 
@@ -545,12 +688,14 @@
 
     setBusy(true);
     setStep("generating");
-    setStatus(`Rendering photorealistic ${id.common_name || "bird"} portrait…`);
+    setStatus(`Rendering photorealistic ${id.common_name || "bird"} wildlife art…`);
     els.imageEmpty.classList.add("hidden");
     els.imageLoading.classList.remove("hidden");
     const t0 = performance.now();
     els.genTimer.textContent = "0";
-    genClock = setInterval(() => { els.genTimer.textContent = Math.round((performance.now() - t0) / 1000); }, 500);
+    genClock = setInterval(() => {
+      els.genTimer.textContent = Math.round((performance.now() - t0) / 1000);
+    }, 500);
 
     try {
       const data = await api("/api/generate", {
@@ -562,6 +707,9 @@
           model: els.imageModel.value || null,
           aspect_ratio: els.aspectRatio.value,
           image_size: els.imageSize.value,
+          bird_name: id.common_name || "Bird",
+          scientific_name: id.scientific_name || "",
+          audio_url: state.currentAudioUrl || "",
         }),
       });
       await loadImage(API + data.image_url);
@@ -569,6 +717,8 @@
       renderMetadata(data.parameters);
       setStep("complete");
       setStatus(`Complete — ${id.common_name} rendered in ${((performance.now() - t0) / 1000).toFixed(1)} s.`);
+      els.btnRegenerate.disabled = false;
+      els.btnDownload.disabled = false;
     } catch (err) {
       reportError(err, "generating");
       if (!state.lastImage) els.imageEmpty.classList.remove("hidden");
@@ -581,64 +731,191 @@
 
   function loadImage(src) {
     return new Promise((resolve, reject) => {
-      const img = els.image;
-      img.onload = () => { img.classList.remove("hidden"); resolve(); };
-      img.onerror = () => reject(new ApiError("IMAGE_LOAD", "The generated image could not be loaded."));
+      const img = els.birdImage;
+      img.onload = () => {
+        img.classList.remove("hidden");
+        els.speciesThumb.src = src;
+        els.speciesThumb.classList.remove("hidden");
+        if (els.speciesThumbPlaceholder) els.speciesThumbPlaceholder.classList.add("hidden");
+        resolve();
+      };
+      img.onerror = () => reject(new ApiError("IMAGE_LOAD", "Generated image could not be loaded."));
       img.src = src;
     });
   }
 
   function renderMetadata(p) {
+    els.metadataCard.classList.remove("hidden");
     els.metaPrompt.textContent = p.prompt;
     els.metaNegative.textContent = p.negative_prompt || "(none)";
-    const rows = [
-      ["Image model", p.model], ["Aspect ratio", p.aspect_ratio], ["Resolution", p.image_size],
-      ["Seed", p.seed !== undefined ? p.seed : 42],
-      ["Generation time", `${p.generation_seconds} s`], ["Recognition model", state.audioModelUsed || "—"],
-    ];
-    if (p.model_notes) rows.push(["Model notes", p.model_notes]);
-    els.metaParams.replaceChildren(...rows.map(([k, v]) => {
-      const wrap = document.createElement("div");
-      wrap.className = k === "Model notes" ? "col-span-2 sm:col-span-3" : "";
-      const dt = document.createElement("dt"); 
-      dt.className = "text-stone-500 dark:text-stone-400 font-medium"; 
-      dt.textContent = k;
-      const dd = document.createElement("dd"); 
-      dd.className = "font-mono text-stone-800 dark:text-stone-200 break-all font-semibold"; 
-      dd.textContent = String(v);
-      wrap.append(dt, dd);
-      return wrap;
-    }));
+    els.metaImageModel.textContent = p.model || "fal-ai/fast-sdxl";
+    els.metaAspectRatio.textContent = p.aspect_ratio || "1:1";
+    els.metaResolution.textContent = p.image_size || "1K";
+    els.metaGenTime.textContent = `${p.generation_seconds} s`;
+    els.metaRecModel.textContent = state.audioModelUsed || "gemini-3.5-flash";
+  }
+
+  function reportError(err, step) {
+    console.error(err);
+    setStep(step, { error: true });
+    setStatus(err.message);
+    showAlert("Error", err.message, "error");
+    if (err.code === "NO_API_KEY" || err.code === "INVALID_API_KEY") {
+      openSettings(true);
+    }
   }
 
   async function downloadImage() {
     if (!state.lastImage) return;
     try {
       const res = await fetch(API + state.lastImage.image_url);
-      if (!res.ok) throw new Error("Image expired from the server cache — click Regenerate.");
+      if (!res.ok) throw new Error("Image expired from server cache.");
       const blob = await res.blob();
       const name = (state.identification?.common_name || "bird").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `${name}-${Date.now()}.${ext}`;
+      a.download = `${name}-${Date.now()}.png`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch (err) {
-      showAlert("Download failed", err.message);
+      showAlert("Download failed", err.message, "warn");
     }
   }
 
-  // ------------------------------------------------------------------ API key & settings
+  // ------------------------------------------------------------------ Recordings View Logic
+  async function loadRecordings() {
+    try {
+      const items = await api("/api/recordings");
+      if (!items || !items.length) {
+        els.recordingsContainer.innerHTML = `
+          <div class="text-center py-16 text-stone-500 space-y-2">
+            <span class="text-4xl">🎙️</span>
+            <p class="text-sm font-semibold text-stone-300">No recordings saved yet</p>
+            <p class="text-xs text-stone-500">Record a bird call on the Home tab or upload an audio file to see it here.</p>
+          </div>
+        `;
+        return;
+      }
+
+      els.recordingsContainer.innerHTML = items.map((rec) => {
+        const kb = Math.round(rec.size_bytes / 1024);
+        return `
+          <div class="p-4 rounded-2xl bg-canvas-card border border-canvas-cardBorder flex flex-wrap items-center justify-between gap-4 hover:border-canvas-mint/30 transition">
+            <div class="flex items-center gap-3 min-w-[240px]">
+              <div class="w-10 h-10 rounded-xl bg-canvas-inner border border-white/[0.08] flex items-center justify-center text-canvas-mint text-base">
+                🎵
+              </div>
+              <div>
+                <h4 class="font-mono text-xs font-semibold text-white truncate max-w-sm">${rec.filename}</h4>
+                <p class="text-[11px] text-canvas-muted mt-0.5">${rec.created_at} · ${kb} KB</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <audio controls class="h-8 max-w-[220px]" src="${rec.url}"></audio>
+              <button data-analyze-url="${rec.url}" data-analyze-name="${rec.filename}" class="btn-use-rec px-3 py-1.5 rounded-xl bg-canvas-mint/15 hover:bg-canvas-mint/25 border border-canvas-mint/30 text-canvas-mint text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer">
+                <span>🔍</span>
+                <span>Analyze</span>
+              </button>
+              <a href="${rec.url}" download="${rec.filename}" class="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white transition" title="Download Audio">
+                ⬇
+              </a>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      // Wire Analyze buttons
+      document.querySelectorAll(".btn-use-rec").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const url = btn.dataset.analyzeUrl;
+          const name = btn.dataset.analyzeName;
+          showView("home");
+          setStatus(`Loading ${name} from recordings…`);
+          try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            setAudioPlayback(blob);
+            await analyze(blob, name);
+          } catch (err) {
+            showAlert("Could not load recording", err.message);
+          }
+        });
+      });
+    } catch (err) {
+      console.warn("Could not load recordings:", err);
+    }
+  }
+
+  // ------------------------------------------------------------------ Library View Logic
+  async function loadLibrary() {
+    try {
+      const items = await api("/api/library");
+      if (!items || !items.length) {
+        els.libraryContainer.innerHTML = `
+          <div class="col-span-full text-center py-16 text-stone-500 space-y-2">
+            <span class="text-4xl">🎨</span>
+            <p class="text-sm font-semibold text-stone-300">No generated birds in your library yet</p>
+            <p class="text-xs text-stone-500">Record or upload a bird sound on the Home tab to analyze and generate photorealistic portraits.</p>
+          </div>
+        `;
+        return;
+      }
+
+      els.libraryContainer.innerHTML = items.map((item) => {
+        const audioLinkHtml = item.audio_url ? `
+          <div class="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] space-y-1.5">
+            <div class="flex items-center justify-between text-[11px]">
+              <span class="font-semibold text-canvas-mint flex items-center gap-1">
+                <span>🎵</span>
+                <span>Audio Call: ${item.bird_name}</span>
+              </span>
+              <a href="${item.audio_url}" download class="text-stone-400 hover:text-white underline">Download</a>
+            </div>
+            <audio controls class="w-full h-7" src="${item.audio_url}"></audio>
+          </div>
+        ` : `
+          <div class="text-[11px] text-stone-500 italic">No audio recorded for this item</div>
+        `;
+
+        return `
+          <div class="rounded-3xl bg-canvas-card border border-canvas-cardBorder overflow-hidden glow-card flex flex-col justify-between hover:border-canvas-mint/30 transition">
+            <div>
+              <div class="aspect-square w-full bg-canvas-inner overflow-hidden relative">
+                <img src="${item.image_url}" alt="${item.bird_name}" class="w-full h-full object-cover hover:scale-105 transition duration-500" loading="lazy" />
+              </div>
+              <div class="p-4 space-y-3">
+                <div>
+                  <h3 class="font-display font-bold text-lg text-white">${item.bird_name}</h3>
+                  <p class="text-xs italic text-canvas-sage">${item.scientific_name || "Species"}</p>
+                </div>
+                ${audioLinkHtml}
+              </div>
+            </div>
+
+            <div class="p-4 pt-0 border-t border-white/[0.04] mt-2 flex items-center justify-between text-[11px] text-stone-400">
+              <span>${item.created_at || ""}</span>
+              <a href="${item.image_url}" download="${item.bird_name}.png" class="px-3 py-1 rounded-xl bg-canvas-mint text-[#08150e] font-bold shadow-sm hover:opacity-90 transition">
+                Download HD
+              </a>
+            </div>
+          </div>
+        `;
+      }).join("");
+    } catch (err) {
+      console.warn("Could not load library:", err);
+    }
+  }
+
+  // ------------------------------------------------------------------ Settings & Keys
   const KEY_NAME = "birdsong.geminiKey";
   const FAL_KEY_NAME = "birdsong.falKey";
   const PREFS_NAME = "birdsong.prefs";
   const safe = (fn, fallback = null) => { try { return fn(); } catch { return fallback; } };
   const sanitizeKey = (k) => (k || "").replace(/[^\x20-\x7E]/g, "").trim().replace(/^["'`]|["'`]$/g, "").trim();
 
-  // "Remember" keeps the key in localStorage; otherwise it lives only for this tab (sessionStorage).
   const keyStore = {
     get: () => sanitizeKey(safe(() => localStorage.getItem(KEY_NAME) || sessionStorage.getItem(KEY_NAME)) || ""),
     set(key, remember) {
@@ -658,34 +935,26 @@
   const prefs = {
     load: () => safe(() => JSON.parse(localStorage.getItem(PREFS_NAME)) || {}, {}),
     save: () => safe(() => localStorage.setItem(PREFS_NAME, JSON.stringify({
-      audioModel: els.audioModel.value, imageModel: els.imageModel.value,
-      aspectRatio: els.aspectRatio.value, imageSize: els.imageSize.value,
+      audioModel: els.audioModel.value,
+      imageModel: els.imageModel.value,
+      aspectRatio: els.aspectRatio.value,
+      imageSize: els.imageSize.value,
     }))),
   };
 
-  const maskKey = (k) => (k.length > 10 ? `${k.slice(0, 4)}…${k.slice(-4)}` : "set");
+  const maskKey = (k) => (k && k.length > 8 ? `${k.slice(0, 4)}...${k.slice(-4)}` : "set");
 
   function setKeyIndicator(ok, label) {
-    els.keyDot.className = `w-2.5 h-2.5 rounded-full ${ok === true ? "bg-pastel-sage-500 dark:bg-pastel-sage-400 shadow-sm shadow-pastel-sage-500/50" : ok === false ? "bg-red-500" : "bg-amber-400"}`;
-    els.keyPillLabel.textContent = label;
+    els.keyDot.className = `w-2 h-2 rounded-full ${ok ? "bg-canvas-mint shadow-[0_0_8px_#4ade80]" : "bg-amber-400"}`;
+    els.keyPillLabel.textContent = label || "Gemini: Connected";
   }
 
-  function setKeyStatus(text, kind = "muted") {
-    els.keyStatus.className = { 
-      ok: "text-pastel-sage-600 dark:text-pastel-sage-400 font-semibold", 
-      error: "text-red-600 dark:text-red-300 font-semibold", 
-      muted: "text-stone-500 dark:text-stone-400" 
-    }[kind];
-    els.keyStatus.textContent = text;
-  }
-
-  function openKeyPanel(open) {
-    els.keyPanel.classList.toggle("hidden", !open);
-    els.keyToggle.setAttribute("aria-expanded", String(open));
-    if (open && !els.keyInput.value) els.keyInput.focus();
+  function openSettings(open) {
+    els.settingsModal.classList.toggle("hidden", !open);
   }
 
   function fillSelect(select, models, preferred) {
+    if (!models || !models.length) return;
     const current = preferred && models.includes(preferred) ? preferred : models[0];
     select.replaceChildren(...models.map((m) => new Option(m, m, m === current, m === current)));
   }
@@ -693,7 +962,6 @@
   async function checkKey({ quiet = false } = {}) {
     els.keySave.disabled = true;
     els.keySave.textContent = "Testing…";
-    setKeyStatus("Verifying API keys…");
     try {
       const data = await api("/api/key/check", { method: "POST" });
       const p = prefs.load();
@@ -701,19 +969,18 @@
       fillSelect(els.imageModel, data.image_models, p.imageModel || data.default_image_model);
       const k = keyStore.get();
       const fk = keyStore.getFal();
-      const labels = [];
-      if (k) labels.push(`Gemini: ${maskKey(k)}`);
-      if (fk) labels.push(`Fal: ${maskKey(fk)}`);
-      setKeyIndicator(true, labels.join(" | ") || "Server keys");
-      setKeyStatus(`✓ Keys verified! ${data.audio_models.length} audio models and ${data.image_models.length} image models available.`, "ok");
+      const parts = [];
+      if (k) parts.push(`Gemini: ${maskKey(k)}`);
+      if (fk) parts.push(`Fal: ${maskKey(fk)}`);
+      setKeyIndicator(true, parts.join(" | ") || "Gemini: Connected");
+      els.keyStatus.textContent = `✓ ${data.audio_models.length} audio & ${data.image_models.length} image models available.`;
       els.keySave.textContent = "✓ Verified";
-      if (!quiet) showAlert("API keys saved", "API keys verified and saved! You can record or upload audio now.", "info");
+      if (!quiet) showAlert("Keys verified", "API keys saved and engines active!", "info");
       return true;
     } catch (err) {
-      setKeyIndicator(false, err.code === "NO_API_KEY" ? "No API key" : "Key problem");
-      setKeyStatus(err.message, "error");
+      setKeyIndicator(false, "Gemini: Key needed");
+      els.keyStatus.textContent = err.message;
       els.keySave.textContent = "Save & test";
-      openKeyPanel(true);
       return false;
     } finally {
       els.keySave.disabled = false;
@@ -721,8 +988,6 @@
   }
 
   async function initSettings() {
-    themeManager.init();
-
     const p = prefs.load();
     if (p.aspectRatio) els.aspectRatio.value = p.aspectRatio;
     if (p.imageSize) els.imageSize.value = p.imageSize;
@@ -730,81 +995,68 @@
     let config;
     try {
       config = await api("/api/config");
+      fillSelect(els.audioModel, [p.audioModel || config.audio_model]);
+      fillSelect(els.imageModel, [p.imageModel || config.image_model]);
     } catch (err) {
-      showAlert("Backend offline", err.message);
-      return;
+      console.warn("Config fetch failed:", err);
     }
-    fillSelect(els.audioModel, [p.audioModel || config.audio_model]);
-    fillSelect(els.imageModel, [p.imageModel || config.image_model]);
 
     const key = keyStore.get();
     const falKey = keyStore.getFal();
     els.keyInput.value = key;
-    if (els.falKeyInput) els.falKeyInput.value = falKey;
+    els.falKeyInput.value = falKey;
     els.keyRemember.checked = keyStore.remembered();
 
-    if (key || falKey || config.server_key_configured) {
-      setKeyIndicator(null, "Checking keys…");
+    if (key || falKey || config?.server_key_configured) {
       await checkKey({ quiet: true });
     } else {
-      setKeyIndicator(false, "No API key");
-      setKeyStatus("Paste your Gemini & Fal.ai keys and click Save & test.");
-      openKeyPanel(true);
+      setKeyIndicator(false, "No API key configured");
+      openSettings(true);
     }
   }
 
-  els.keyToggle.addEventListener("click", () => openKeyPanel(els.keyPanel.classList.contains("hidden")));
-  els.keyReveal.addEventListener("click", () => {
-    const hidden = els.keyInput.type === "password";
-    els.keyInput.type = hidden ? "text" : "password";
-    els.keyReveal.textContent = hidden ? "Hide" : "Show";
+  // Settings Modal Listeners
+  els.btnSettingsToggle.addEventListener("click", () => openSettings(true));
+  if (els.navSettings) els.navSettings.addEventListener("click", (e) => { e.preventDefault(); openSettings(true); });
+  els.btnSettingsClose.addEventListener("click", () => openSettings(false));
+  els.settingsModal.addEventListener("click", (e) => {
+    if (e.target === els.settingsModal) openSettings(false);
   });
-  if (els.falKeyReveal) {
-    els.falKeyReveal.addEventListener("click", () => {
-      const hidden = els.falKeyInput.type === "password";
-      els.falKeyInput.type = hidden ? "text" : "password";
-      els.falKeyReveal.textContent = hidden ? "Hide" : "Show";
-    });
-  }
+
+  els.keyReveal.addEventListener("click", () => {
+    const isPass = els.keyInput.type === "password";
+    els.keyInput.type = isPass ? "text" : "password";
+    els.keyReveal.textContent = isPass ? "Hide" : "Show";
+  });
+  els.falKeyReveal.addEventListener("click", () => {
+    const isPass = els.falKeyInput.type === "password";
+    els.falKeyInput.type = isPass ? "text" : "password";
+    els.falKeyReveal.textContent = isPass ? "Hide" : "Show";
+  });
+
   els.keySave.addEventListener("click", async () => {
     const key = els.keyInput.value.trim();
-    const falKey = els.falKeyInput ? els.falKeyInput.value.trim() : "";
-    if (!key && !falKey) {
-      setKeyStatus("Please paste your Gemini API key first.", "error");
-      els.keyInput.focus();
-      return;
-    }
+    const falKey = els.falKeyInput.value.trim();
     if (key) keyStore.set(key, els.keyRemember.checked);
     if (falKey) keyStore.setFal(falKey, els.keyRemember.checked);
     const ok = await checkKey();
     if (ok) {
-      setTimeout(() => {
-        openKeyPanel(false);
-        els.keySave.textContent = "Save & test";
-      }, 900);
+      setTimeout(() => openSettings(false), 800);
     }
   });
-  els.keyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") els.keySave.click(); });
-  if (els.falKeyInput) {
-    els.falKeyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") els.keySave.click(); });
-  }
-  els.keyRemember.addEventListener("change", () => {
-    const key = keyStore.get();
-    const falKey = keyStore.getFal();
-    if (key) keyStore.set(key, els.keyRemember.checked);
-    if (falKey) keyStore.setFal(falKey, els.keyRemember.checked);
-  });
+
   els.keyClear.addEventListener("click", () => {
     keyStore.set("", false);
     keyStore.setFal("", false);
     els.keyInput.value = "";
-    if (els.falKeyInput) els.falKeyInput.value = "";
-    setKeyIndicator(false, "No API key");
-    setKeyStatus("Keys removed from this browser.");
+    els.falKeyInput.value = "";
+    setKeyIndicator(false, "No key");
+    els.keyStatus.textContent = "Keys cleared from this browser.";
   });
+
   [els.audioModel, els.imageModel, els.aspectRatio, els.imageSize].forEach((s) => s.addEventListener("change", prefs.save));
 
-  // ------------------------------------------------------------------ Wire up
+  // ------------------------------------------------------------------ Actions Wiring
   els.btnRecord.addEventListener("click", () => {
     hideAlert();
     state.recording ? stopRecording() : startRecording().catch((err) => {
@@ -814,49 +1066,52 @@
       showAlert("Recording failed", err.message);
     });
   });
+
   els.fileInput.addEventListener("change", (e) => {
     hideAlert();
     handleUpload(e.target.files[0]);
     e.target.value = "";
   });
-  els.btnRegenerate.addEventListener("click", () => { hideAlert(); generate(); });
-  els.btnForce.addEventListener("click", () => { hideAlert(); els.lowConf.classList.add("hidden"); generate(); });
+
+  els.btnRegenerate.addEventListener("click", () => {
+    hideAlert();
+    generate();
+  });
+
+  if (els.btnForce) {
+    els.btnForce.addEventListener("click", () => {
+      hideAlert();
+      els.lowConf.classList.add("hidden");
+      generate();
+    });
+  }
+
   els.btnDownload.addEventListener("click", downloadImage);
-  document.querySelectorAll("[data-copy]").forEach((btn) =>
-    btn.addEventListener("click", async () => {
-      const text = $(btn.dataset.copy)?.textContent || "";
-      try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(text);
-        } else {
-          const ta = document.createElement("textarea");
-          ta.value = text;
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand("copy");
-          ta.remove();
-        }
-        btn.textContent = "Copied";
-        setTimeout(() => (btn.textContent = "Copy"), 1200);
-      } catch {
-        showAlert("Copy failed", "Could not copy text to clipboard.", "info");
-      }
-    }));
+
+  // Copy Buttons
+  els.btnCopyAll.addEventListener("click", async () => {
+    const text = `PROMPT:\n${els.metaPrompt.textContent}\n\nNEGATIVE PROMPT:\n${els.metaNegative.textContent}\n\nSPECS:\nImage model: ${els.metaImageModel.textContent}\nAspect ratio: ${els.metaAspectRatio.textContent}\nResolution: ${els.metaResolution.textContent}\nGeneration time: ${els.metaGenTime.textContent}\nRecognition model: ${els.metaRecModel.textContent}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      els.btnCopyAllLabel.textContent = "Copied!";
+      setTimeout(() => (els.btnCopyAllLabel.textContent = "Copy all"), 1500);
+    } catch {
+      showAlert("Copy failed", "Could not write to clipboard.", "warn");
+    }
+  });
+
+  els.btnCopyNeg.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(els.metaNegative.textContent);
+      els.btnCopyNeg.textContent = "Copied!";
+      setTimeout(() => (els.btnCopyNeg.textContent = "Copy"), 1500);
+    } catch {
+      showAlert("Copy failed", "Could not write to clipboard.", "warn");
+    }
+  });
 
   window.addEventListener("resize", sizeCanvas);
   sizeCanvas();
-
-  // Opened as a local file (file://)? The API and microphone only work when
-  // the page is served by the backend, so jump there if it's running.
-  if (location.protocol === "file:") {
-    const SERVER = "http://127.0.0.1:8000/";
-    fetch(SERVER + "api/config", { mode: "no-cors" })
-      .then(() => location.replace(SERVER))
-      .catch(() => showAlert(
-        "Backend not running",
-        `This page was opened as a file. Start the server with ".venv\\Scripts\\python -m uvicorn main:app --port 8000" in the project folder, then open ${SERVER}`,
-      ));
-  } else {
-    initSettings();
-  }
+  updatePlayerUI();
+  initSettings();
 })();

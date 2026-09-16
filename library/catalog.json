@@ -1,0 +1,17 @@
+[
+  {
+    "id": "98a29b40cbed436185949c440bd59355",
+    "filename": "2026-09-16_17-24-11_willow-warbler.jpg",
+    "image_url": "/api/library/images/2026-09-16_17-24-11_willow-warbler.jpg",
+    "bird_name": "Willow Warbler",
+    "scientific_name": "Phylloscopus trochilus",
+    "audio_url": "/api/recordings/upload_2026-09-16_17-24-05.mp3",
+    "prompt": "A photorealistic wildlife photograph of a Willow Warbler (Phylloscopus trochilus) perched delicately on a slender, budding birch branch. The bird is small and elegant, showing its soft olive-green upperparts, bright yellowish-white breast and throat, and a distinct pale yellow stripe above its dark eye. Its fine, pointed beak is slightly open as if singing. The background is a soft, out-of-focus spring woodland with dappled golden sunlight filtering through fresh green leaves. Captured with a telephoto 600mm lens, shallow depth of field with beautiful creamy bokeh, tack-sharp focus on the bird's eye, highlighting the intricate texture of its feathers, 8k, National Geographic style.",
+    "negative_prompt": "blurry, low quality, distorted anatomy, extra limbs, extra wings, deformed beak, illustration, cartoon, painting, 3d render, text, watermark, humans, cage, Common Chiffchaff, Wood Warbler",
+    "model": "fal-ai/fast-sdxl",
+    "aspect_ratio": "1:1",
+    "image_size": "1K",
+    "generation_seconds": 5.7,
+    "created_at": "2026-09-16 17:24:11"
+  }
+]

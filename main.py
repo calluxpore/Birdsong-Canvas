@@ -18,11 +18,14 @@ Then open http://127.0.0.1:8000
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
+import re
 import time
 import uuid
 from collections import OrderedDict
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -30,7 +33,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, Header, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from google import genai
 from google.genai import errors as genai_errors
@@ -96,6 +99,11 @@ EXTENSION_MIME = {
 AspectRatio = Literal["1:1", "4:3", "3:4", "16:9", "9:16"]
 ImageSize = Literal["1K", "2K"]
 
+RECORDINGS_DIR = Path(__file__).parent / "recordings"
+LIBRARY_DIR = Path(__file__).parent / "library"
+RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
+
 
 # --------------------------------------------------------------------------- #
 # Schemas                                                                     #
@@ -120,6 +128,10 @@ class GenerateRequest(BaseModel):
     aspect_ratio: AspectRatio = "1:1"
     image_size: ImageSize = "1K"
     seed: int | None = Field(default=None)
+    bird_name: str | None = Field(default=None)
+    scientific_name: str | None = Field(default=None)
+    audio_url: str | None = Field(default=None)
+
 
 
 AUDIO_SYSTEM_PROMPT = """\
@@ -463,7 +475,19 @@ async def api_identify(
     if len(data) > settings.max_audio_bytes:
         raise ApiError(413, "AUDIO_TOO_LARGE", f"Audio exceeds {settings.max_audio_bytes // (1024 * 1024)} MB. Trim it to 5–30 seconds.")
 
-    log.info("Identifying %s (%d bytes, %s) with %s", audio.filename, len(data), mime_type, model)
+    # Save audio with datetime format filename immediately so all uploaded/recorded files persist
+    now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    orig_name = (audio.filename or "").lower()
+    if "record" in orig_name or orig_name.endswith(".wav"):
+        safe_name = f"recording_{now_str}.wav"
+    else:
+        ext = Path(orig_name or "audio.wav").suffix.lower() or ".wav"
+        safe_name = f"upload_{now_str}{ext}"
+
+    rec_path = RECORDINGS_DIR / safe_name
+    rec_path.write_bytes(data)
+
+    log.info("Saved %s and identifying (%d bytes, %s) with %s", safe_name, len(data), mime_type, model)
     result = await identify_bird(client, model, data, mime_type)
 
     if not result.identified or not result.common_name:
@@ -482,6 +506,12 @@ async def api_identify(
         "min_confidence": settings.min_confidence,
         "model": model,
         "result": result.model_dump(),
+        "audio_record": {
+            "filename": safe_name,
+            "url": f"/api/recordings/{safe_name}",
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "size_bytes": len(data),
+        },
     }
 
 
@@ -564,10 +594,52 @@ async def api_generate(
         raise ApiError(502, "NO_IMAGE", f"Image generator returned no image ({detail}). Try Regenerate.")
 
     image_id = image_store.put(image_bytes, mime)
+
+    # Persist image to library with datetime format filename and bird name
+    now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    bird_slug = re.sub(r"[^a-z0-9]+", "-", (req.bird_name or "bird").lower()).strip("-") or "bird"
+    ext = ".png" if "png" in mime else ".jpg"
+    img_filename = f"{now_str}_{bird_slug}{ext}"
+    try:
+        (LIBRARY_DIR / img_filename).write_bytes(image_bytes)
+    except Exception as exc:
+        log.warning("Could not persist image to library disk: %s", exc)
+
+    # Update library catalog
+    catalog_file = LIBRARY_DIR / "catalog.json"
+    catalog: list[dict[str, Any]] = []
+    if catalog_file.exists():
+        try:
+            catalog = json.loads(catalog_file.read_text(encoding="utf-8"))
+        except Exception:
+            catalog = []
+
+    lib_entry = {
+        "id": image_id,
+        "filename": img_filename,
+        "image_url": f"/api/library/images/{img_filename}",
+        "bird_name": req.bird_name or "Unknown Bird",
+        "scientific_name": req.scientific_name or "",
+        "audio_url": req.audio_url or "",
+        "prompt": req.image_prompt,
+        "negative_prompt": req.negative_prompt,
+        "model": model,
+        "aspect_ratio": req.aspect_ratio,
+        "image_size": req.image_size,
+        "generation_seconds": round(elapsed, 1),
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    catalog.insert(0, lib_entry)
+    try:
+        catalog_file.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
+    except Exception as exc:
+        log.warning("Could not update library catalog: %s", exc)
+
     return {
         "image_id": image_id,
         "image_url": f"/api/images/{image_id}",
         "mime_type": mime,
+        "library_item": lib_entry,
         "parameters": {
             "prompt": req.image_prompt,
             "negative_prompt": req.negative_prompt,
@@ -590,6 +662,59 @@ async def api_image(image_id: str) -> Response:
     return Response(content=data, media_type=mime, headers={"Cache-Control": "private, max-age=3600"})
 
 
+@app.get("/api/recordings")
+async def api_list_recordings() -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for p in sorted(RECORDINGS_DIR.glob("*"), key=lambda x: x.stat().st_mtime, reverse=True):
+        if p.is_file() and not p.name.startswith("."):
+            mtime = datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            items.append({
+                "filename": p.name,
+                "url": f"/api/recordings/{p.name}",
+                "created_at": mtime,
+                "size_bytes": p.stat().st_size,
+            })
+    return items
+
+
+@app.get("/api/recordings/{filename}")
+async def api_get_recording(filename: str) -> FileResponse:
+    safe_path = (RECORDINGS_DIR / Path(filename).name).resolve()
+    if not safe_path.is_file() or not str(safe_path).startswith(str(RECORDINGS_DIR.resolve())):
+        raise ApiError(404, "RECORDING_NOT_FOUND", "Recording file not found.")
+    ext = safe_path.suffix.lower()
+    media_type = EXTENSION_MIME.get(ext, "audio/wav")
+    return FileResponse(path=safe_path, media_type=media_type, filename=safe_path.name)
+
+
+@app.get("/api/library")
+async def api_list_library() -> list[dict[str, Any]]:
+    catalog_file = LIBRARY_DIR / "catalog.json"
+    if not catalog_file.exists():
+        return []
+    try:
+        return json.loads(catalog_file.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+@app.get("/api/library/images/{filename}")
+async def api_get_library_image(filename: str) -> FileResponse:
+    safe_path = (LIBRARY_DIR / Path(filename).name).resolve()
+    if not safe_path.is_file() or not str(safe_path).startswith(str(LIBRARY_DIR.resolve())):
+        raise ApiError(404, "IMAGE_NOT_FOUND", "Library image not found.")
+    ext = safe_path.suffix.lower()
+    media_type = "image/png" if ext == ".png" else "image/jpeg"
+    return FileResponse(path=safe_path, media_type=media_type)
+
+
 # Serve the frontend from the same origin (mounted last so /api/* wins).
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)
+

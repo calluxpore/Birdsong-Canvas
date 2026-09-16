@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full dark">
+<html lang="en" class="dark h-full">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Birdsong Canvas — Bioacoustic Bird Identification & Photorealistic Art</title>
+  <title>Birdsong Canvas — Bioacoustic Audio & Photorealistic Wildlife Art</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Newsreader:ital,opsz,wght@1,6..72,400;1,6..72,500;1,6..72,600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -14,484 +14,715 @@
       theme: {
         extend: {
           fontFamily: {
-            sans: ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
             display: ['"Outfit"', 'sans-serif'],
-            serif: ['"Newsreader"', 'Georgia', 'serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
           },
           colors: {
-            pastel: {
-              sage: {
-                50: '#f4f8f4',
-                100: '#e3eee3',
-                200: '#c6dec6',
-                300: '#9ec69e',
-                400: '#75a875',
-                500: '#548c54',
-                600: '#3e6f3e',
-                700: '#315731',
-              },
-              mint: {
-                50: '#f0faf6',
-                100: '#dcf4ec',
-                200: '#bce8da',
-                300: '#8ed5c1',
-                400: '#5bbda2',
-                500: '#389f84',
-              },
-              lavender: {
-                50: '#f6f7fd',
-                100: '#ebedfa',
-                200: '#d7dbf6',
-                300: '#b4bcf0',
-                400: '#8f9be8',
-              },
-              peach: {
-                50: '#fff7f2',
-                100: '#ffede2',
-                200: '#ffd6c2',
-                300: '#ffb594',
-                400: '#f88f63',
-              },
-              cream: {
-                50: '#fdfbf7',
-                100: '#f8f4eb',
-                200: '#eee5d5',
-              }
-            },
-            surface: {
-              lightBg: '#f5f7f4',
-              lightCard: '#ffffff',
-              lightSubtle: '#edf2ec',
-              lightBorder: '#dbe5dc',
-              darkBg: '#0b100d',
-              darkCard: '#131b16',
-              darkSubtle: '#18241e',
-              darkBorder: 'rgba(255, 255, 255, 0.08)',
+            canvas: {
+              bg: '#080d0b',
+              sidebar: '#09100d',
+              card: '#0e1814',
+              cardBorder: 'rgba(34, 197, 94, 0.12)',
+              cardHover: 'rgba(34, 197, 94, 0.22)',
+              inner: '#09120e',
+              mint: '#4ade80',
+              emerald: '#22c55e',
+              neon: '#2dd4bf',
+              muted: '#71877d',
+              sage: '#8fa89b',
             }
-          },
-          boxShadow: {
-            'pastel-light': '0 10px 30px -5px rgba(84, 140, 84, 0.08), 0 4px 12px -2px rgba(0, 0, 0, 0.03)',
-            'pastel-glow': '0 0 25px -5px rgba(117, 168, 117, 0.25)',
           }
-        },
-      },
+        }
+      }
     };
   </script>
   <style>
     /* Custom Scrollbars */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(120, 150, 130, 0.25); border-radius: 999px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(120, 150, 130, 0.45); }
+    ::-webkit-scrollbar-thumb { background: rgba(74, 222, 128, 0.2); border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(74, 222, 128, 0.4); }
 
-    /* Pipeline Status Animations */
-    .step[data-state="active"] .dot {
-      background: #75a875;
-      box-shadow: 0 0 0 4px rgba(117, 168, 117, 0.35);
-      animation: pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    /* Custom range slider styling */
+    input[type=range] {
+      -webkit-appearance: none;
+      background: transparent;
     }
-    .step[data-state="done"] .dot {
-      background: #548c54;
+    input[type=range]:focus {
+      outline: none;
     }
-    html.dark .step[data-state="done"] .dot {
-      background: #75a875;
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 4px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
     }
-    .step[data-state="error"] .dot {
-      background: #f87171;
-      box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.25);
-    }
-    .step[data-state="active"] .label, .step[data-state="done"] .label {
-      font-weight: 600;
+    input[type=range]::-webkit-slider-thumb {
+      height: 12px;
+      width: 12px;
+      border-radius: 50%;
+      background: #4ade80;
+      box-shadow: 0 0 8px #4ade80;
+      cursor: pointer;
+      -webkit-appearance: none;
+      margin-top: -4px;
     }
 
-    @keyframes pulse-ring {
-      0%, 100% { transform: scale(1); box-shadow: 0 0 0 4px rgba(117, 168, 117, 0.35); }
-      50% { transform: scale(1.18); box-shadow: 0 0 0 8px rgba(117, 168, 117, 0.1); }
+    /* Glow utilities */
+    .glow-mint {
+      box-shadow: 0 0 20px -3px rgba(74, 222, 128, 0.35);
+    }
+    .glow-card {
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
 
-    details[open] summary .chev { transform: rotate(90deg); }
-
-    /* Shimmer Skeleton Animations */
-    .shimmer-dark {
-      background: linear-gradient(105deg, #131b16 20%, #1c2921 50%, #131b16 80%);
+    /* Shimmer loading */
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .shimmer {
+      background: linear-gradient(90deg, #0e1814 25%, #182a22 50%, #0e1814 75%);
       background-size: 200% 100%;
-      animation: shimmer 1.8s infinite linear;
-    }
-    .shimmer-light {
-      background: linear-gradient(105deg, #edf2ec 20%, #fafcfa 50%, #edf2ec 80%);
-      background-size: 200% 100%;
-      animation: shimmer 1.8s infinite linear;
-    }
-    @keyframes shimmer { to { background-position: -200% 0; } }
-
-    /* Audio visualizer glow */
-    .canvas-container {
-      background-image: radial-gradient(circle at 50% 50%, rgba(117, 168, 117, 0.05) 0%, transparent 80%);
+      animation: shimmer 2s infinite;
     }
   </style>
 </head>
-<body class="h-full bg-surface-lightBg text-stone-800 dark:bg-surface-darkBg dark:text-stone-200 transition-colors duration-300 font-sans antialiased selection:bg-pastel-sage-300/40">
-  <!-- Global Toast Alert Banner -->
-  <div id="alert" class="hidden fixed top-5 left-1/2 -translate-x-1/2 z-50 w-[min(94vw,620px)] rounded-2xl border px-4 py-3.5 shadow-2xl backdrop-blur-xl transition-all duration-300" role="alert">
-    <div class="flex items-start gap-3">
-      <span id="alert-icon" class="text-xl leading-none mt-0.5 select-none">✨</span>
-      <div class="flex-1">
-        <p id="alert-title" class="font-display font-semibold text-sm tracking-wide"></p>
-        <p id="alert-message" class="text-xs opacity-90 mt-0.5 leading-relaxed"></p>
+<body class="bg-canvas-bg text-stone-200 font-sans antialiased min-h-screen flex flex-col selection:bg-canvas-emerald/30 selection:text-white">
+
+  <!-- Toast Notification Alert -->
+  <div id="alert" class="hidden fixed top-5 left-1/2 -translate-x-1/2 z-50 w-[min(94vw,560px)] rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-xl transition-all duration-300">
+    <div class="flex items-center gap-3">
+      <span id="alert-icon" class="text-xl leading-none">✨</span>
+      <div class="flex-1 min-w-0">
+        <p id="alert-title" class="font-display font-semibold text-xs tracking-wide text-white"></p>
+        <p id="alert-message" class="text-[11px] text-stone-300 mt-0.5 truncate"></p>
       </div>
-      <button id="alert-close" class="opacity-60 hover:opacity-100 p-1 text-lg leading-none transition" aria-label="Dismiss">×</button>
+      <button id="alert-close" class="text-stone-400 hover:text-white p-1 text-base leading-none">×</button>
     </div>
   </div>
 
-  <!-- Navigation Bar -->
-  <header class="sticky top-0 z-40 border-b border-surface-lightBorder dark:border-surface-darkBorder bg-surface-lightCard/85 dark:bg-surface-darkBg/85 backdrop-blur-md px-4 sm:px-6 py-3 transition-colors">
-    <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
-      
-      <!-- Brand & Title -->
-      <div class="flex items-center gap-3.5">
-        <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pastel-sage-500 via-pastel-sage-400 to-pastel-mint-300 flex items-center justify-center text-xl shadow-md shadow-pastel-sage-700/20 dark:shadow-pastel-sage-950/40 shrink-0 transform transition-transform hover:rotate-6">
-          🪶
-        </div>
-        <div>
-          <div class="flex items-center gap-2.5">
-            <h1 class="font-display font-bold text-lg sm:text-xl tracking-tight text-stone-900 dark:text-white">
-              Birdsong Canvas
-            </h1>
-            <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-pastel-sage-100 dark:bg-pastel-sage-500/15 text-pastel-sage-700 dark:text-pastel-sage-300 border border-pastel-sage-200 dark:border-pastel-sage-500/20">
-              Multimodal AI
-            </span>
-          </div>
-          <p class="text-[11px] text-stone-500 dark:text-stone-400 font-medium">Bioacoustic audio identification &amp; photorealistic wildlife art</p>
-        </div>
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-40 h-16 border-b border-white/[0.06] bg-[#09100d]/90 backdrop-blur-md px-6 flex items-center justify-between">
+    <!-- Brand / Logo -->
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-600/30 to-canvas-mint/20 border border-canvas-mint/40 flex items-center justify-center text-canvas-mint shadow-[0_0_12px_rgba(74,222,128,0.25)]">
+        <svg class="w-4 h-4 fill-current text-canvas-mint" viewBox="0 0 24 24">
+          <path d="M17 8C8 10 5.9 16.17 3.82 21.34l1.89.66.95-2.3c.48.17.98.3 1.34.3C19 20 22 3 22 3c-1 2-8 2.25-13 3.25S2 11.5 2 13.5c0 1.7 1.3 3.5 3 3.5 1.5 0 2.5-1 3.5-2 .8 1.5 2.5 2 4.5 2 4 0 7-3 7-5 0-.5-.5-1-1-1s-1.5.5-2 1z"/>
+        </svg>
+      </div>
+      <span class="font-display font-bold text-lg tracking-tight text-white">Birdsong Canvas</span>
+    </div>
+
+    <!-- Center Breadcrumb Stepper -->
+    <nav class="hidden md:flex items-center gap-2.5 text-xs text-canvas-muted font-medium">
+      <span class="text-canvas-sage hover:text-white transition">Listen</span>
+      <span class="text-white/20">→</span>
+      <span class="text-canvas-sage hover:text-white transition">Recognize</span>
+      <span class="text-white/20">→</span>
+      <span class="text-canvas-sage hover:text-white transition">Understand</span>
+      <span class="text-white/20">→</span>
+      <span class="text-canvas-sage hover:text-white transition">Paint</span>
+    </nav>
+
+    <!-- Top Right: Status Pill & Settings Button -->
+    <div class="flex items-center gap-3">
+      <div id="status-pill" class="flex items-center gap-2 text-[11px] font-mono px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-stone-300">
+        <span id="key-dot" class="w-2 h-2 rounded-full bg-canvas-mint animate-pulse shadow-[0_0_8px_#4ade80]"></span>
+        <span id="key-pill-label" class="tracking-tight text-stone-300">Gemini: Connected</span>
       </div>
 
-      <!-- Header Controls: API Keys + Theme Switcher -->
-      <div class="flex items-center gap-2 sm:gap-3">
-        <!-- API Key Status Pill -->
-        <button id="btn-key-toggle" class="flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200/80 dark:bg-white/[0.06] dark:hover:bg-white/[0.12] border border-stone-200 dark:border-white/[0.08] text-stone-800 dark:text-stone-200 transition-all shadow-sm active:scale-95 cursor-pointer" aria-expanded="false" aria-controls="key-panel">
-          <span id="key-dot" class="w-2.5 h-2.5 rounded-full bg-stone-400 dark:bg-stone-500 shadow-sm"></span>
-          <span id="key-pill-label" class="hidden xs:inline truncate max-w-[140px] font-medium">API Keys</span>
-          <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-          </svg>
-        </button>
-
-        <!-- Dark / Light Mode Toggle Button -->
-        <button id="btn-theme-toggle" class="w-10 h-10 rounded-xl flex items-center justify-center bg-stone-100 hover:bg-stone-200/80 dark:bg-white/[0.06] dark:hover:bg-white/[0.12] border border-stone-200 dark:border-white/[0.08] text-stone-700 dark:text-stone-200 transition-all active:scale-95 shadow-sm cursor-pointer group" aria-label="Toggle dark and light mode" title="Toggle theme (Dark / Light)">
-          <!-- Sun Icon for Dark Mode -->
-          <svg id="icon-sun" class="w-5 h-5 hidden dark:block text-amber-300 transition-transform group-hover:rotate-45 duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
-          </svg>
-          <!-- Moon Icon for Light Mode -->
-          <svg id="icon-moon" class="w-5 h-5 block dark:hidden text-stone-700 transition-transform group-hover:-rotate-12 duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-          </svg>
-        </button>
-      </div>
+      <button id="btn-settings-toggle" class="w-8 h-8 rounded-full flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-stone-400 hover:text-white transition active:scale-95 cursor-pointer" title="Settings & API Keys">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+        </svg>
+      </button>
     </div>
   </header>
 
-  <!-- Sliding API Key & Model Settings Panel -->
-  <section id="key-panel" class="hidden border-b border-surface-lightBorder dark:border-surface-darkBorder bg-pastel-sage-50/70 dark:bg-surface-darkCard px-4 sm:px-6 py-6 transition-all shadow-inner">
-    <div class="max-w-5xl mx-auto space-y-6">
-      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 dark:border-white/[0.06] pb-3">
-        <div>
-          <h2 class="font-display font-semibold text-sm text-stone-900 dark:text-white flex items-center gap-2">
-            <span>⚙️</span> API Keys &amp; Model Engines
-          </h2>
-          <p class="text-xs text-stone-600 dark:text-stone-400 mt-0.5">Gemini handles audio acoustics &amp; ornithology prompt engineering; Fal.ai renders instant HD art.</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <button id="btn-key-save" class="rounded-xl bg-pastel-sage-500 hover:bg-pastel-sage-600 dark:bg-pastel-sage-400 dark:hover:bg-pastel-sage-300 text-white dark:text-[#0c100e] font-display font-semibold px-4 py-2 text-xs shadow-md transition disabled:opacity-40 cursor-pointer">Save &amp; test</button>
-          <button id="btn-key-clear" class="rounded-xl border border-stone-300 dark:border-white/10 hover:bg-stone-200/50 dark:hover:border-white/25 px-3 py-2 text-xs text-stone-600 dark:text-stone-400 transition cursor-pointer">Clear</button>
-        </div>
-      </div>
-
-      <div class="grid gap-5 md:grid-cols-2">
-        <!-- Gemini Key Card -->
-        <div class="rounded-2xl bg-white dark:bg-surface-darkSubtle border border-surface-lightBorder dark:border-white/[0.08] p-4.5 space-y-3 shadow-sm">
-          <div class="flex items-center justify-between">
-            <label for="api-key" class="text-xs font-bold uppercase tracking-wider text-pastel-sage-700 dark:text-pastel-sage-300">1. Google AI Studio Key (Audio &amp; ID)</label>
-            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="text-[11px] font-medium text-pastel-sage-600 dark:text-pastel-sage-400 underline underline-offset-2 hover:opacity-80">Get free key ↗</a>
-          </div>
-          <div class="relative">
-            <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="AIzaSy..."
-              class="w-full bg-stone-50 dark:bg-[#0c100e] border border-stone-300 dark:border-white/10 focus:border-pastel-sage-500 dark:focus:border-pastel-sage-400 outline-none rounded-xl pl-3.5 pr-16 py-2.5 font-mono text-xs text-stone-800 dark:text-stone-200 transition" />
-            <button id="btn-key-reveal" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 cursor-pointer font-medium">Show</button>
-          </div>
-          <p class="text-[11px] text-stone-500 dark:text-stone-400 leading-relaxed">Runs multimodal bioacoustic frequency identification via Gemini 3.5 Flash.</p>
-        </div>
-
-        <!-- Fal.ai Key Card -->
-        <div class="rounded-2xl bg-white dark:bg-surface-darkSubtle border border-surface-lightBorder dark:border-white/[0.08] p-4.5 space-y-3 shadow-sm">
-          <div class="flex items-center justify-between">
-            <label for="fal-key" class="text-xs font-bold uppercase tracking-wider text-pastel-mint-500 dark:text-pastel-mint-300">2. Fal.ai Key (Fast Image Art)</label>
-            <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener" class="text-[11px] font-medium text-pastel-mint-500 dark:text-pastel-mint-300 underline underline-offset-2 hover:opacity-80">Get Fal key ↗</a>
-          </div>
-          <div class="relative">
-            <input id="fal-key" type="password" autocomplete="off" spellcheck="false" placeholder="fal_key_id:secret..."
-              class="w-full bg-stone-50 dark:bg-[#0c100e] border border-stone-300 dark:border-white/10 focus:border-pastel-mint-500 dark:focus:border-pastel-mint-300 outline-none rounded-xl pl-3.5 pr-16 py-2.5 font-mono text-xs text-stone-800 dark:text-stone-200 transition" />
-            <button id="btn-fal-reveal" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 cursor-pointer font-medium">Show</button>
-          </div>
-          <p class="text-[11px] text-stone-500 dark:text-stone-400 leading-relaxed">Fast SDXL, FLUX.1 Schnell, and SDXL Turbo without quota bottlenecks.</p>
-        </div>
-      </div>
-
-      <!-- Model Selectors & Options Grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 text-xs">
-        <label class="flex flex-col gap-1.5">
-          <span class="text-stone-600 dark:text-stone-400 font-semibold">Recognition model</span>
-          <select id="audio-model" class="bg-white dark:bg-[#0c100e] border border-stone-300 dark:border-white/10 rounded-xl px-3 py-2 text-stone-800 dark:text-stone-200 outline-none focus:border-pastel-sage-500 dark:focus:border-pastel-sage-400 transition cursor-pointer"></select>
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-stone-600 dark:text-stone-400 font-semibold">Image generation model</span>
-          <select id="image-model" class="bg-white dark:bg-[#0c100e] border border-stone-300 dark:border-white/10 rounded-xl px-3 py-2 text-stone-800 dark:text-stone-200 outline-none focus:border-pastel-mint-500 dark:focus:border-pastel-mint-300 transition cursor-pointer"></select>
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-stone-600 dark:text-stone-400 font-semibold">Aspect ratio</span>
-          <select id="aspect-ratio" class="bg-white dark:bg-[#0c100e] border border-stone-300 dark:border-white/10 rounded-xl px-3 py-2 text-stone-800 dark:text-stone-200 outline-none focus:border-pastel-sage-500 dark:focus:border-pastel-sage-400 transition cursor-pointer">
-            <option value="1:1">1:1 Square</option>
-            <option value="4:3">4:3 Landscape</option>
-            <option value="3:4">3:4 Portrait</option>
-            <option value="16:9">16:9 Cinema</option>
-            <option value="9:16">9:16 Mobile</option>
-          </select>
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-stone-600 dark:text-stone-400 font-semibold">Resolution</span>
-          <select id="image-size" class="bg-white dark:bg-[#0c100e] border border-stone-300 dark:border-white/10 rounded-xl px-3 py-2 text-stone-800 dark:text-stone-200 outline-none focus:border-pastel-sage-500 dark:focus:border-pastel-sage-400 transition cursor-pointer">
-            <option value="1K">1K Standard (HD)</option>
-            <option value="2K">2K High Res (QHD)</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-stone-200/80 dark:border-white/[0.06] text-xs">
-        <label class="flex items-center gap-2 text-stone-600 dark:text-stone-400 cursor-pointer select-none">
-          <input id="key-remember" type="checkbox" class="w-4 h-4 rounded accent-pastel-sage-500 bg-stone-100 dark:bg-[#0c100e] border-stone-300 dark:border-white/10" />
-          <span>Remember API keys in this browser</span>
-        </label>
-        <span id="key-status" class="text-xs text-stone-500 dark:text-stone-400 font-medium"></span>
-      </div>
-    </div>
-  </section>
-
-  <!-- Main Split-Screen Workspace -->
-  <main class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 grid lg:grid-cols-12 gap-6 min-h-[calc(100vh-75px)] items-start">
+  <!-- Body Container with Sidebar + Main Grid -->
+  <div class="flex-1 flex overflow-hidden">
     
-    <!-- ============ LEFT COLUMN: Audio Bioacoustics (5 cols) ============ -->
-    <section class="lg:col-span-5 flex flex-col gap-6">
-      
-      <!-- Bioacoustic Capture Card -->
-      <div class="rounded-3xl bg-surface-lightCard dark:bg-surface-darkCard border border-surface-lightBorder dark:border-surface-darkBorder p-5 sm:p-6 shadow-pastel-light dark:shadow-2xl space-y-5 transition-colors">
-        
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2.5">
-            <span class="w-2.5 h-2.5 rounded-full bg-pastel-sage-500 dark:bg-pastel-sage-400 shadow-sm"></span>
-            <h2 class="font-display font-bold text-xs uppercase tracking-[0.16em] text-stone-800 dark:text-stone-200">Bioacoustic Capture</h2>
-          </div>
-          <span class="text-[11px] font-mono text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-white/[0.04] px-2 py-0.5 rounded-md border border-stone-200 dark:border-white/[0.06]">16-bit 48kHz WAV</span>
+    <!-- Left Navigation Sidebar -->
+    <aside class="w-56 shrink-0 border-r border-white/[0.06] bg-canvas-sidebar hidden md:flex flex-col justify-between p-5">
+      <!-- Top Nav Links -->
+      <nav class="space-y-2">
+        <!-- Home (Active) -->
+        <a href="#" id="nav-home" class="nav-btn flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-950/70 to-emerald-900/40 border border-canvas-mint/30 text-canvas-mint font-medium text-xs shadow-[0_0_15px_rgba(74,222,128,0.15)] transition">
+          <svg class="w-4 h-4 text-canvas-mint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+          </svg>
+          <span class="font-semibold">Home</span>
+        </a>
+
+        <!-- Recordings -->
+        <a href="#" id="nav-recordings" class="nav-btn flex items-center gap-3 px-4 py-2.5 rounded-2xl text-stone-400 hover:text-white hover:bg-white/[0.04] transition font-medium text-xs">
+          <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+          </svg>
+          <span>Recordings</span>
+        </a>
+
+        <!-- Library -->
+        <a href="#" id="nav-library" class="nav-btn flex items-center gap-3 px-4 py-2.5 rounded-2xl text-stone-400 hover:text-white hover:bg-white/[0.04] transition font-medium text-xs">
+          <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+          </svg>
+          <span>Library</span>
+        </a>
+
+        <!-- Settings -->
+        <a href="#" id="nav-settings" class="nav-btn flex items-center gap-3 px-4 py-2.5 rounded-2xl text-stone-400 hover:text-white hover:bg-white/[0.04] transition font-medium text-xs">
+          <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          </svg>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <!-- Bottom Bird Illustration & Poetic Tagline -->
+      <div class="pt-6 border-t border-white/[0.04] space-y-4">
+        <!-- Delicate Bird Line Art SVG -->
+        <div class="w-28 h-28 opacity-45 hover:opacity-75 transition duration-500">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 85 C30 82, 60 84, 95 80 M45 83 C50 75, 58 72, 65 74 M25 84 C30 88, 38 86, 42 84" />
+            <path d="M30 65 C25 50, 32 30, 52 24 C62 20, 72 26, 75 32 C78 35, 88 34, 92 37 C87 40, 80 44, 76 45 C72 58, 62 70, 48 74 C38 76, 32 72, 30 65 Z" />
+            <path d="M52 24 C58 20, 68 22, 75 32" stroke-width="1.8" />
+            <circle cx="68" cy="30" r="1.5" fill="#4ade80" />
+            <path d="M48 45 C55 48, 65 55, 68 68 C58 70, 48 62, 48 45 Z" />
+            <path d="M32 68 C22 75, 12 85, 8 92 C14 88, 25 80, 34 74" />
+            <path d="M48 74 L46 83 M54 73 L53 83" />
+          </svg>
         </div>
 
-        <!-- Waveform Visualizer Canvas -->
-        <div class="relative rounded-2xl bg-surface-lightSubtle dark:bg-[#0c100e] border border-surface-lightBorder dark:border-white/[0.08] overflow-hidden shadow-inner canvas-container">
-          <canvas id="visualizer" class="w-full h-40 block"></canvas>
-          
-          <!-- Live REC Badge -->
-          <div id="rec-badge" class="hidden absolute top-3 left-3 flex items-center gap-2 text-xs font-semibold bg-red-500/20 text-red-700 dark:text-red-200 border border-red-500/30 px-3 py-1 rounded-full backdrop-blur-md shadow-sm">
-            <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-            <span>REC <span id="rec-timer" class="font-mono">0.0</span>s</span>
-          </div>
-
-          <!-- Progress Bar -->
-          <div class="absolute bottom-0 left-0 h-1.5 bg-gradient-to-r from-pastel-sage-500 to-pastel-mint-400 dark:from-pastel-sage-400 dark:to-pastel-mint-300 transition-[width] duration-100" id="rec-progress" style="width:0"></div>
-        </div>
-
-        <!-- Controls Row -->
-        <div class="flex flex-wrap items-center gap-3">
-          <button id="btn-record" class="flex-1 min-w-[140px] inline-flex items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-pastel-sage-500 to-pastel-mint-500 dark:from-pastel-sage-400 dark:to-pastel-mint-300 hover:opacity-95 text-white dark:text-[#0c100e] font-display font-bold px-5 py-3 transition shadow-md shadow-pastel-sage-600/20 dark:shadow-pastel-sage-950/40 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
-            <span id="btn-record-icon" class="text-base">🎙️</span>
-            <span id="btn-record-label">Record / Listen</span>
-          </button>
-
-          <label class="flex items-center gap-2 text-xs font-semibold text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#0c100e] border border-stone-200 dark:border-white/10 px-3.5 py-3 rounded-2xl cursor-pointer">
-            <span class="text-stone-500 dark:text-stone-400 font-normal">Duration</span>
-            <select id="duration" class="bg-transparent font-bold outline-none cursor-pointer text-stone-800 dark:text-stone-200">
-              <option value="5">5 s</option>
-              <option value="6">6 s</option>
-              <option value="7">7 s</option>
-              <option value="8" selected>8 s</option>
-              <option value="9">9 s</option>
-              <option value="10">10 s</option>
-            </select>
-          </label>
-
-          <label class="inline-flex items-center gap-2 rounded-2xl bg-stone-100 hover:bg-stone-200/80 dark:bg-[#0c100e] dark:hover:bg-white/[0.04] border border-stone-200 dark:border-white/10 hover:border-pastel-sage-400/40 px-4 py-3 text-xs font-semibold text-stone-700 dark:text-stone-300 cursor-pointer transition shadow-sm active:scale-95">
-            <span>📁 Upload</span>
-            <input id="file-input" type="file" accept="audio/wav,audio/x-wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/x-m4a,audio/webm,audio/ogg,audio/flac,audio/aac,.wav,.mp3,.mp4,.m4a,.webm,.ogg,.flac,.aac,.aiff,.aif" class="hidden" />
-          </label>
-        </div>
-
-        <!-- Audio Playback Preview -->
-        <audio id="playback" controls class="hidden w-full h-10 rounded-xl opacity-90 transition"></audio>
-
-        <!-- Pipeline Status Stepper -->
-        <ol id="pipeline" class="grid grid-cols-4 gap-2 pt-3 border-t border-stone-200/80 dark:border-white/[0.06] text-[11px]">
-          <li class="step" data-step="listening" data-state="idle">
-            <div class="flex items-center gap-1.5">
-              <span class="dot w-2 h-2 rounded-full bg-stone-300 dark:bg-stone-700 shrink-0 transition-all"></span>
-              <span class="label text-stone-500 dark:text-stone-400 truncate">1. Listen</span>
-            </div>
-          </li>
-          <li class="step" data-step="analyzing" data-state="idle">
-            <div class="flex items-center gap-1.5">
-              <span class="dot w-2 h-2 rounded-full bg-stone-300 dark:bg-stone-700 shrink-0 transition-all"></span>
-              <span class="label text-stone-500 dark:text-stone-400 truncate">2. Identify</span>
-            </div>
-          </li>
-          <li class="step" data-step="generating" data-state="idle">
-            <div class="flex items-center gap-1.5">
-              <span class="dot w-2 h-2 rounded-full bg-stone-300 dark:bg-stone-700 shrink-0 transition-all"></span>
-              <span class="label text-stone-500 dark:text-stone-400 truncate">3. Paint</span>
-            </div>
-          </li>
-          <li class="step" data-step="complete" data-state="idle">
-            <div class="flex items-center gap-1.5">
-              <span class="dot w-2 h-2 rounded-full bg-stone-300 dark:bg-stone-700 shrink-0 transition-all"></span>
-              <span class="label text-stone-500 dark:text-stone-400 truncate">4. Ready</span>
-            </div>
-          </li>
-        </ol>
-
-        <p id="status-text" class="text-xs text-stone-600 dark:text-stone-400 text-center leading-relaxed">
-          Point your microphone toward a singing bird or upload a clear audio recording.
+        <p class="text-xs text-canvas-muted leading-relaxed font-sans">
+          Beyond sound,<br>
+          into nature's<br>
+          language.
         </p>
       </div>
+    </aside>
 
-      <!-- Identification Results Card -->
-      <div id="results" class="hidden rounded-3xl bg-surface-lightCard dark:bg-surface-darkCard border border-surface-lightBorder dark:border-surface-darkBorder p-5 sm:p-6 shadow-pastel-light dark:shadow-2xl space-y-5 transition-all">
-        <div id="low-conf" class="hidden rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-200 text-xs px-4 py-3 leading-relaxed"></div>
+    <!-- Main Workspace Content Area -->
+    <main class="flex-1 overflow-y-auto p-5 sm:p-6 lg:p-7">
 
-        <div>
-          <span class="text-[10px] uppercase font-bold tracking-widest text-pastel-sage-600 dark:text-pastel-sage-400">Identified Species</span>
-          <p id="res-common" class="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-stone-900 dark:text-white mt-0.5">—</p>
-          <p id="res-scientific" class="font-serif italic text-base text-pastel-sage-700 dark:text-pastel-sage-200 mt-0.5">—</p>
+      <!-- ==================== VIEW 1: HOME WORKSPACE ==================== -->
+      <div id="view-home" class="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+        <!-- Left Column (5 Cols) -->
+        <div class="lg:col-span-5 flex flex-col gap-6">
+
+          <!-- Card 1: Audio Input & Analysis -->
+          <div class="rounded-3xl bg-canvas-card border border-canvas-cardBorder p-5 sm:p-6 glow-card space-y-5">
+            <!-- Card Header -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-xl bg-emerald-950/70 border border-canvas-mint/20 flex items-center justify-center text-canvas-mint">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h2 class="font-display font-bold text-sm text-white tracking-wide">Audio Input &amp; Analysis</h2>
+                  <p class="text-[11px] text-canvas-muted mt-0.5">Upload, record or analyze bird sounds</p>
+                </div>
+              </div>
+
+              <!-- Duration Badge Toggle -->
+              <span id="badge-duration" class="text-[11px] font-mono font-medium px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-canvas-sage">
+                8s ∿
+              </span>
+            </div>
+
+            <!-- Waveform Canvas Box -->
+            <div class="relative h-44 rounded-2xl bg-canvas-inner border border-white/[0.06] overflow-hidden flex items-center justify-center">
+              <canvas id="visualizer" class="w-full h-full block"></canvas>
+
+              <!-- Scrubber vertical line (hidden initially until audio plays) -->
+              <div id="visualizer-playhead" class="hidden absolute top-0 bottom-0 w-[2px] bg-canvas-neon shadow-[0_0_8px_#2dd4bf] pointer-events-none transition-all duration-75" style="left: 0%;"></div>
+
+              <!-- Live Recording Badge -->
+              <div id="rec-badge" class="hidden absolute top-3 left-3 flex items-center gap-2 text-xs font-semibold bg-red-500/20 text-red-300 border border-red-500/30 px-3 py-1 rounded-full backdrop-blur-md">
+                <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                <span>REC <span id="rec-timer" class="font-mono">0.0</span>s</span>
+              </div>
+
+              <!-- Rec progress line -->
+              <div id="rec-progress" class="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-canvas-mint to-canvas-emerald transition-[width] duration-100" style="width: 0%"></div>
+            </div>
+
+            <!-- Custom Audio Player Bar -->
+            <div class="flex items-center gap-3 px-2 py-1">
+              <!-- Play / Pause Button -->
+              <button id="btn-player-play" disabled class="w-9 h-9 rounded-full bg-canvas-mint text-[#07130c] flex items-center justify-center shadow-[0_0_12px_rgba(74,222,128,0.3)] transition active:scale-95 shrink-0 opacity-40 cursor-not-allowed" title="Play audio">
+                <svg id="icon-player-play" class="w-4 h-4 ml-0.5 fill-current" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                <svg id="icon-player-pause" class="w-4 h-4 fill-current hidden" viewBox="0 0 24 24">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+              </button>
+
+              <!-- Time Display -->
+              <span id="player-time" class="font-mono text-xs text-stone-400 shrink-0">0:00 / 0:00</span>
+
+              <!-- Seek Bar Slider -->
+              <div class="flex-1 relative flex items-center">
+                <input id="player-seek" type="range" min="0" max="100" value="0" step="0.1" class="w-full cursor-pointer" />
+              </div>
+
+              <!-- Speaker / Mute Button -->
+              <button id="btn-player-volume" class="text-stone-400 hover:text-white transition p-1" title="Mute/Unmute">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z"/>
+                </svg>
+              </button>
+
+              <!-- Hidden native audio for playback control -->
+              <audio id="playback" class="hidden" preload="auto"></audio>
+            </div>
+
+            <!-- Action Controls Row -->
+            <div class="flex items-center gap-2.5 pt-1">
+              <!-- Record / Listen Button -->
+              <button id="btn-record" class="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-canvas-mint to-canvas-emerald hover:opacity-95 text-[#06180f] font-display font-bold text-xs flex items-center justify-center gap-2 transition active:scale-95 shadow-[0_0_18px_rgba(74,222,128,0.25)] cursor-pointer">
+                <span id="btn-record-icon" class="text-sm">🎙</span>
+                <span id="btn-record-label">Record / Listen</span>
+              </button>
+
+              <!-- Duration Selector Pill -->
+              <div class="relative shrink-0">
+                <button id="btn-duration-menu" class="h-11 px-3 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-medium text-stone-200 flex items-center gap-1.5 transition cursor-pointer">
+                  <span class="text-canvas-sage">⏱</span>
+                  <span id="duration-display">8s</span>
+                  <span class="text-[10px] text-stone-400">⌵</span>
+                </button>
+                <select id="duration" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                  <option value="5">5s</option>
+                  <option value="6">6s</option>
+                  <option value="7">7s</option>
+                  <option value="8" selected>8s</option>
+                  <option value="9">9s</option>
+                  <option value="10">10s</option>
+                </select>
+              </div>
+
+              <!-- Upload Audio Button -->
+              <label class="h-11 px-4 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-medium text-stone-200 flex items-center gap-2 cursor-pointer transition active:scale-95 shrink-0">
+                <svg class="w-4 h-4 text-canvas-sage" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                <span>Upload audio</span>
+                <input id="file-input" type="file" accept="audio/*" class="hidden" />
+              </label>
+            </div>
+
+            <!-- Pipeline Status Stepper (Horizontal) -->
+            <div id="pipeline" class="pt-3 border-t border-white/[0.06] flex items-center justify-between text-[11px]">
+              <div class="step flex items-center gap-1.5 text-stone-500" data-step="listening" data-state="idle">
+                <div class="w-4 h-4 rounded-full bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-[10px] text-stone-500">○</div>
+                <span class="font-medium text-stone-500">Listening</span>
+              </div>
+              <div class="step flex items-center gap-1.5 text-stone-500" data-step="analyzing" data-state="idle">
+                <div class="w-4 h-4 rounded-full bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-[10px] text-stone-500">○</div>
+                <span class="font-medium text-stone-500">Analyzing Audio</span>
+              </div>
+              <div class="step flex items-center gap-1.5 text-stone-500" data-step="generating" data-state="idle">
+                <div class="w-4 h-4 rounded-full bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-[10px] text-stone-500">○</div>
+                <span class="font-medium text-stone-500">Generating Visual</span>
+              </div>
+              <div class="step flex items-center gap-1.5 text-stone-500" data-step="complete" data-state="idle">
+                <div class="w-4 h-4 rounded-full bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-[10px] text-stone-500">○</div>
+                <span class="font-medium text-stone-500">Complete</span>
+              </div>
+            </div>
+
+            <p id="status-text" class="text-[11px] text-canvas-muted text-center pt-1">
+              Point your microphone toward a singing bird or upload an audio file to identify.
+            </p>
+          </div>
+
+          <!-- Card 2: Detected Species Card (hidden initially until identified) -->
+          <div id="results" class="hidden rounded-3xl bg-canvas-card border border-canvas-cardBorder p-5 sm:p-6 glow-card space-y-5 transition-all">
+            <!-- Badge -->
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/70 border border-canvas-mint/30 text-[11px] font-display font-semibold tracking-wider text-canvas-mint uppercase">
+              <span>◆</span>
+              <span>DETECTED SPECIES</span>
+            </div>
+
+            <!-- Species Header & Avatar -->
+            <div class="flex items-start gap-4">
+              <!-- Thumbnail -->
+              <div class="w-20 h-20 rounded-2xl bg-canvas-inner border border-white/[0.08] overflow-hidden shrink-0 shadow-md flex items-center justify-center text-3xl">
+                <img id="species-thumb" alt="Species thumbnail" class="hidden w-full h-full object-cover" />
+                <span id="species-thumb-placeholder">🐦</span>
+              </div>
+
+              <!-- Names & Confidence -->
+              <div class="flex-1 min-w-0">
+                <h3 id="res-common" class="font-display text-2xl font-bold text-white tracking-tight leading-tight">—</h3>
+                <p id="res-scientific" class="text-xs italic text-canvas-sage font-medium mt-0.5">—</p>
+
+                <!-- Confidence Bar -->
+                <div class="mt-3 space-y-1">
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="text-canvas-muted">Confidence</span>
+                    <span id="res-conf-label" class="font-mono font-bold text-canvas-mint">0%</span>
+                  </div>
+                  <div class="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                    <div id="res-conf-bar" class="h-full rounded-full bg-gradient-to-r from-canvas-mint to-canvas-emerald shadow-[0_0_8px_#4ade80] transition-all duration-700" style="width: 0%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Native Habitat -->
+            <div class="space-y-1.5 pt-2 border-t border-white/[0.04]">
+              <div class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-canvas-mint">
+                <span>📍</span>
+                <span>NATIVE HABITAT</span>
+              </div>
+              <p id="res-habitat" class="text-xs text-stone-300 leading-relaxed font-sans">—</p>
+            </div>
+
+            <!-- Field Marks -->
+            <div class="space-y-1.5 pt-2 border-t border-white/[0.04]">
+              <div class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-canvas-mint">
+                <span>🍃</span>
+                <span>FIELD MARKS</span>
+              </div>
+              <p id="res-visual" class="text-xs text-stone-300 leading-relaxed font-sans">—</p>
+            </div>
+
+            <!-- Low confidence warning -->
+            <div id="low-conf" class="hidden rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs p-3"></div>
+            <button id="btn-force-generate" class="hidden w-full text-center text-xs font-semibold text-canvas-mint underline cursor-pointer">
+              Generate art with best guess anyway →
+            </button>
+          </div>
+
         </div>
 
-        <!-- Confidence Gauge -->
+
+        <!-- Right Column (7 Cols) -->
+        <div class="lg:col-span-7 flex flex-col gap-6">
+
+          <!-- Card 3: Visual Representation -->
+          <div class="rounded-3xl bg-canvas-card border border-canvas-cardBorder p-5 sm:p-6 glow-card space-y-5">
+            <!-- Header & Image/Art Toggle -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2 text-white font-display font-bold text-sm tracking-wide">
+                <span class="text-canvas-mint">✦</span>
+                <span>Visual Representation</span>
+              </div>
+
+              <!-- Toggle tabs: Image vs Art -->
+              <div class="flex items-center rounded-xl bg-white/[0.04] p-1 border border-white/[0.06] text-xs">
+                <button id="btn-tab-image" class="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-canvas-mint text-[#08150e] font-semibold shadow-sm transition">
+                  <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                  </svg>
+                  <span>Image</span>
+                </button>
+                <button id="btn-tab-art" class="flex items-center gap-1.5 px-3 py-1 rounded-lg text-stone-400 hover:text-white transition">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                  </svg>
+                  <span>Art</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Image Canvas Frame -->
+            <div id="image-frame" class="relative aspect-square sm:aspect-[4/3] w-full rounded-2xl bg-canvas-inner border border-white/[0.08] overflow-hidden flex items-center justify-center shadow-2xl">
+              <!-- Rendered Bird Photo (hidden initially until generated) -->
+              <img id="bird-image" alt="Photorealistic bird portrait" class="hidden w-full h-full object-cover transition-opacity duration-500" />
+
+              <!-- Loading State -->
+              <div id="image-loading" class="hidden absolute inset-0 shimmer flex flex-col items-center justify-center gap-3 bg-canvas-inner/90 backdrop-blur-sm z-20">
+                <div class="w-10 h-10 rounded-full border-2 border-canvas-mint/20 border-t-canvas-mint animate-spin"></div>
+                <p class="font-display font-medium text-xs text-stone-200">
+                  Rendering photorealistic wildlife art… <span id="gen-timer" class="font-mono text-canvas-mint">0</span>s
+                </p>
+              </div>
+
+              <!-- Empty State (shown initially) -->
+              <div id="image-empty" class="text-center text-stone-400 px-6 space-y-3">
+                <div class="w-16 h-16 rounded-3xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center text-3xl mx-auto shadow-inner">
+                  🐦
+                </div>
+                <p class="font-display font-semibold text-sm text-stone-200">No bird portrait generated yet</p>
+                <p class="text-xs text-stone-500 max-w-sm leading-relaxed">
+                  Capture or upload a bird call. Multimodal AI will identify the vocalization, extract morphological plumage details, and paint a high-fidelity wildlife portrait.
+                </p>
+              </div>
+            </div>
+
+            <!-- Action Buttons Row -->
+            <div class="flex items-center gap-3">
+              <!-- Regenerate -->
+              <button id="btn-regenerate" disabled class="flex-1 py-3 px-4 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-stone-200 font-display font-medium text-xs flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                <span>↻</span>
+                <span>Regenerate</span>
+              </button>
+
+              <!-- Download Image -->
+              <button id="btn-download" disabled class="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-canvas-mint to-canvas-emerald hover:opacity-95 text-[#06180f] font-display font-bold text-xs flex items-center justify-center gap-2 transition active:scale-95 shadow-[0_0_15px_rgba(74,222,128,0.2)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                </svg>
+                <span>Download Image</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 4: Generation Metadata (hidden initially until generated) -->
+          <div id="metadata-card" class="hidden rounded-3xl bg-canvas-card border border-canvas-cardBorder p-5 sm:p-6 glow-card space-y-4 transition-all">
+            <!-- Header -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2 text-white font-display font-bold text-sm tracking-wide">
+                <span class="text-canvas-mint">ℹ</span>
+                <span>Generation Metadata</span>
+              </div>
+              <button id="btn-copy-all" class="text-xs text-stone-300 hover:text-white flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/[0.04] border border-white/[0.08] transition active:scale-95 cursor-pointer">
+                <span>📋</span>
+                <span id="btn-copy-all-label">Copy all</span>
+              </button>
+            </div>
+
+            <!-- PROMPT -->
+            <div class="space-y-1.5">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-canvas-muted">PROMPT</span>
+              <div class="p-3.5 rounded-2xl bg-canvas-inner border border-white/[0.06] text-xs font-mono text-stone-300 leading-relaxed shadow-inner max-h-36 overflow-y-auto">
+                <p id="meta-prompt">—</p>
+              </div>
+            </div>
+
+            <!-- AVOID (NEGATIVE PROMPT) -->
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-canvas-muted">AVOID (NEGATIVE PROMPT)</span>
+                <button id="btn-copy-neg" class="text-[11px] text-stone-400 hover:text-white transition cursor-pointer">Copy</button>
+              </div>
+              <div class="p-3 rounded-2xl bg-canvas-inner border border-white/[0.06] text-[11px] font-mono text-stone-400 leading-relaxed shadow-inner max-h-24 overflow-y-auto">
+                <p id="meta-negative">(none)</p>
+              </div>
+            </div>
+
+            <!-- Metadata Specs Grid (2x3) -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs">
+              <!-- Image model -->
+              <div class="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                <div class="flex items-center gap-1.5 text-[11px] text-canvas-muted">
+                  <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                  </svg>
+                  <span>Image model</span>
+                </div>
+                <p id="meta-image-model" class="font-mono text-stone-200 font-semibold mt-0.5 truncate">—</p>
+              </div>
+
+              <!-- Aspect ratio -->
+              <div class="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                <div class="flex items-center gap-1.5 text-[11px] text-canvas-muted">
+                  <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                  </svg>
+                  <span>Aspect ratio</span>
+                </div>
+                <p id="meta-aspect-ratio" class="font-mono text-stone-200 font-semibold mt-0.5">—</p>
+              </div>
+
+              <!-- Resolution -->
+              <div class="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                <div class="flex items-center gap-1.5 text-[11px] text-canvas-muted">
+                  <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <span>Resolution</span>
+                </div>
+                <p id="meta-resolution" class="font-mono text-stone-200 font-semibold mt-0.5">—</p>
+              </div>
+
+              <!-- Generation time -->
+              <div class="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                <div class="flex items-center gap-1.5 text-[11px] text-canvas-muted">
+                  <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <span>Generation time</span>
+                </div>
+                <p id="meta-gen-time" class="font-mono text-stone-200 font-semibold mt-0.5">—</p>
+              </div>
+
+              <!-- Recognition model -->
+              <div class="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04] col-span-2 sm:col-span-2">
+                <div class="flex items-center gap-1.5 text-[11px] text-canvas-muted">
+                  <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                  </svg>
+                  <span>Recognition model</span>
+                </div>
+                <p id="meta-rec-model" class="font-mono text-stone-200 font-semibold mt-0.5">—</p>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ==================== VIEW 2: RECORDINGS GALLERY ==================== -->
+      <div id="view-recordings" class="hidden w-full max-w-5xl mx-auto space-y-6">
+        <!-- Recordings Header -->
+        <div class="flex items-center justify-between border-b border-white/[0.06] pb-4">
+          <div>
+            <h2 class="font-display font-bold text-xl text-white flex items-center gap-2.5">
+              <span>📁</span>
+              <span>Audio Recordings</span>
+            </h2>
+            <p class="text-xs text-canvas-muted mt-1">
+              All recorded and uploaded bird calls, saved with timestamped filenames.
+            </p>
+          </div>
+          <button id="btn-refresh-recordings" class="px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs text-stone-300 flex items-center gap-1.5 transition active:scale-95 cursor-pointer">
+            <span>↻</span>
+            <span>Refresh</span>
+          </button>
+        </div>
+
+        <!-- Recordings List Container -->
+        <div id="recordings-container" class="space-y-3">
+          <!-- Populated dynamically via JS -->
+          <div id="recordings-empty" class="text-center py-16 text-stone-500 space-y-2">
+            <span class="text-4xl">🎙️</span>
+            <p class="text-sm font-semibold text-stone-300">No recordings saved yet</p>
+            <p class="text-xs text-stone-500">Record a bird song with the microphone or upload an audio file on the Home tab.</p>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ==================== VIEW 3: LIBRARY GALLERY ==================== -->
+      <div id="view-library" class="hidden w-full max-w-6xl mx-auto space-y-6">
+        <!-- Library Header -->
+        <div class="flex items-center justify-between border-b border-white/[0.06] pb-4">
+          <div>
+            <h2 class="font-display font-bold text-xl text-white flex items-center gap-2.5">
+              <span>🖼️</span>
+              <span>Generated Wildlife Library</span>
+            </h2>
+            <p class="text-xs text-canvas-muted mt-1">
+              Photorealistic bird portraits generated with their corresponding bioacoustic audio calls.
+            </p>
+          </div>
+          <button id="btn-refresh-library" class="px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs text-stone-300 flex items-center gap-1.5 transition active:scale-95 cursor-pointer">
+            <span>↻</span>
+            <span>Refresh</span>
+          </button>
+        </div>
+
+        <!-- Library Grid Container -->
+        <div id="library-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Populated dynamically via JS -->
+          <div id="library-empty" class="col-span-full text-center py-16 text-stone-500 space-y-2">
+            <span class="text-4xl">🎨</span>
+            <p class="text-sm font-semibold text-stone-300">No generated birds in your library yet</p>
+            <p class="text-xs text-stone-500">Record or upload a bird sound on the Home tab to analyze and generate photorealistic portraits.</p>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Settings & API Keys Modal Dialog -->
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md transition-opacity">
+    <div class="w-full max-w-xl rounded-3xl bg-canvas-card border border-canvas-cardBorder p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between border-b border-white/[0.06] pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="text-canvas-mint text-base">⚙️</span>
+          <h2 class="font-display font-bold text-sm text-white">Engine Settings &amp; API Keys</h2>
+        </div>
+        <button id="btn-settings-close" class="text-stone-400 hover:text-white p-1 text-lg leading-none cursor-pointer">✕</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <!-- Google AI Studio Key -->
         <div class="space-y-1.5">
-          <div class="flex justify-between text-xs text-stone-600 dark:text-stone-400">
-            <span class="font-medium">Bioacoustic Confidence</span>
-            <span id="res-conf-label" class="font-mono font-bold text-pastel-sage-600 dark:text-pastel-sage-300">0%</span>
+          <div class="flex items-center justify-between">
+            <label for="api-key" class="font-semibold text-canvas-sage">Google AI Studio Key (Gemini Audio)</label>
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="text-[11px] text-canvas-mint underline">Get free key ↗</a>
           </div>
-          <div class="h-2.5 rounded-full bg-stone-200 dark:bg-black/40 overflow-hidden relative border border-stone-300/60 dark:border-white/[0.06]">
-            <div id="res-conf-bar" class="h-full rounded-full transition-all duration-700" style="width:0"></div>
-            <div id="res-conf-threshold" class="absolute top-0 bottom-0 w-0.5 bg-stone-600 dark:bg-white/60" style="left:60%" title="Confidence threshold (60%)"></div>
-          </div>
-        </div>
-
-        <!-- Native Habitat & Field Marks -->
-        <div class="space-y-3 pt-3 border-t border-stone-200/80 dark:border-white/[0.06] text-xs leading-relaxed">
-          <div class="rounded-2xl bg-stone-50 dark:bg-[#0c100e]/60 p-3.5 border border-stone-200/60 dark:border-white/[0.04]">
-            <p class="font-bold text-stone-800 dark:text-stone-300 flex items-center gap-1.5 mb-1 text-[11px] uppercase tracking-wider text-pastel-sage-700 dark:text-pastel-sage-300">
-              <span>🌿</span> Native Habitat &amp; Distribution
-            </p>
-            <p id="res-habitat" class="text-stone-600 dark:text-stone-400 leading-normal">—</p>
-          </div>
-          <div class="rounded-2xl bg-stone-50 dark:bg-[#0c100e]/60 p-3.5 border border-stone-200/60 dark:border-white/[0.04]">
-            <p class="font-bold text-stone-800 dark:text-stone-300 flex items-center gap-1.5 mb-1 text-[11px] uppercase tracking-wider text-pastel-mint-600 dark:text-pastel-mint-300">
-              <span>🔍</span> Field Marks &amp; Plumage
-            </p>
-            <p id="res-visual" class="text-stone-600 dark:text-stone-400 leading-normal">—</p>
+          <div class="relative">
+            <input id="api-key" type="password" placeholder="AIzaSy..." class="w-full bg-canvas-inner border border-white/[0.08] focus:border-canvas-mint rounded-xl px-3 py-2.5 font-mono text-xs text-white outline-none" />
+            <button id="btn-key-reveal" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-white text-[11px] cursor-pointer">Show</button>
           </div>
         </div>
 
-        <button id="btn-force-generate" class="hidden w-full text-center text-xs font-semibold text-pastel-sage-600 dark:text-pastel-sage-300 hover:text-stone-900 dark:hover:text-white underline underline-offset-4 transition py-1 cursor-pointer">
-          Generate art with best guess anyway →
-        </button>
+        <!-- Fal.ai Key -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label for="fal-key" class="font-semibold text-canvas-sage">Fal.ai API Key (Fast Art Generator)</label>
+            <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener" class="text-[11px] text-canvas-mint underline">Get Fal key ↗</a>
+          </div>
+          <div class="relative">
+            <input id="fal-key" type="password" placeholder="fal_key_id:secret..." class="w-full bg-canvas-inner border border-white/[0.08] focus:border-canvas-mint rounded-xl px-3 py-2.5 font-mono text-xs text-white outline-none" />
+            <button id="btn-fal-reveal" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-white text-[11px] cursor-pointer">Show</button>
+          </div>
+        </div>
+
+        <!-- Model Selects -->
+        <div class="grid grid-cols-2 gap-3 pt-1">
+          <div class="space-y-1">
+            <label for="audio-model" class="text-canvas-muted">Recognition model</label>
+            <select id="audio-model" class="w-full bg-canvas-inner border border-white/[0.08] rounded-xl px-2.5 py-2 text-stone-200 outline-none cursor-pointer"></select>
+          </div>
+          <div class="space-y-1">
+            <label for="image-model" class="text-canvas-muted">Image model</label>
+            <select id="image-model" class="w-full bg-canvas-inner border border-white/[0.08] rounded-xl px-2.5 py-2 text-stone-200 outline-none cursor-pointer"></select>
+          </div>
+          <div class="space-y-1">
+            <label for="aspect-ratio" class="text-canvas-muted">Aspect ratio</label>
+            <select id="aspect-ratio" class="w-full bg-canvas-inner border border-white/[0.08] rounded-xl px-2.5 py-2 text-stone-200 outline-none cursor-pointer">
+              <option value="1:1" selected>1:1 Square</option>
+              <option value="4:3">4:3 Landscape</option>
+              <option value="3:4">3:4 Portrait</option>
+              <option value="16:9">16:9 Cinema</option>
+              <option value="9:16">9:16 Mobile</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label for="image-size" class="text-canvas-muted">Resolution</label>
+            <select id="image-size" class="w-full bg-canvas-inner border border-white/[0.08] rounded-xl px-2.5 py-2 text-stone-200 outline-none cursor-pointer">
+              <option value="1K" selected>1K Standard</option>
+              <option value="2K">2K High Res</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+          <label class="flex items-center gap-2 text-stone-400 cursor-pointer">
+            <input id="key-remember" type="checkbox" class="w-4 h-4 rounded accent-canvas-emerald bg-canvas-inner" checked />
+            <span>Remember keys in this browser</span>
+          </label>
+          <span id="key-status" class="text-[11px] text-stone-400"></span>
+        </div>
       </div>
-    </section>
 
-    <!-- ============ RIGHT COLUMN: Photorealistic Canvas (7 cols) ============ -->
-    <section class="lg:col-span-7 flex flex-col gap-6">
-      
-      <!-- Visual Canvas Card -->
-      <div class="rounded-3xl bg-surface-lightCard dark:bg-surface-darkCard border border-surface-lightBorder dark:border-surface-darkBorder p-5 sm:p-6 shadow-pastel-light dark:shadow-2xl flex flex-col items-center gap-5 transition-colors">
-        
-        <div class="w-full flex items-center justify-between">
-          <div class="flex items-center gap-2.5">
-            <span class="w-2.5 h-2.5 rounded-full bg-pastel-mint-500 dark:bg-pastel-mint-300 shadow-sm"></span>
-            <h2 class="font-display font-bold text-xs uppercase tracking-[0.16em] text-stone-800 dark:text-stone-200">Visual Art Canvas</h2>
-          </div>
-          <span class="text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-white/[0.04] px-2 py-0.5 rounded-md border border-stone-200 dark:border-white/[0.06]">National Geographic Style</span>
-        </div>
-
-        <!-- Image Framing Display -->
-        <div id="image-frame" class="relative aspect-square w-full max-w-[620px] rounded-2xl bg-stone-100 dark:bg-[#0c100e] border border-stone-200 dark:border-white/[0.08] overflow-hidden flex items-center justify-center shadow-xl">
-          <!-- Empty State -->
-          <div id="image-empty" class="text-center text-stone-400 dark:text-stone-500 px-6 space-y-3">
-            <div class="w-16 h-16 rounded-3xl bg-stone-200/70 dark:bg-white/[0.04] border border-stone-300/70 dark:border-white/[0.06] flex items-center justify-center text-3xl mx-auto shadow-inner">
-              🐦
-            </div>
-            <p class="font-display font-semibold text-sm text-stone-700 dark:text-stone-300">Photorealistic bird portrait will appear here</p>
-            <p class="text-xs text-stone-500 dark:text-stone-500 max-w-xs leading-relaxed">Identifies acoustics, extracts plumage &amp; habitat, and renders studio-grade wildlife art.</p>
-          </div>
-
-          <!-- Loading State -->
-          <div id="image-loading" class="hidden absolute inset-0 shimmer-light dark:shimmer-dark flex flex-col items-center justify-center gap-3">
-            <div class="w-12 h-12 rounded-full border-2 border-pastel-mint-500/30 dark:border-pastel-mint-300/30 border-t-pastel-mint-500 dark:border-t-pastel-mint-300 animate-spin"></div>
-            <p class="font-display font-semibold text-sm text-stone-800 dark:text-stone-200">
-              Rendering wildlife art… <span id="gen-timer" class="font-mono text-pastel-mint-600 dark:text-pastel-mint-300">0</span>s
-            </p>
-          </div>
-
-          <!-- Final Rendered Image -->
-          <img id="bird-image" alt="Photorealistic bird portrait" class="hidden w-full h-full object-cover transition-opacity duration-500" />
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex flex-wrap items-center gap-3 w-full max-w-[620px]">
-          <button id="btn-regenerate" disabled class="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-stone-100 hover:bg-stone-200/80 dark:bg-[#0c100e] dark:hover:bg-white/[0.08] border border-stone-300 dark:border-white/10 px-5 py-3 text-xs font-display font-semibold text-stone-800 dark:text-stone-200 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm cursor-pointer">
-            <span>🔄</span> Regenerate
-          </button>
-          <button id="btn-download" disabled class="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-stone-900 hover:bg-stone-800 dark:bg-gradient-to-r dark:from-stone-100 dark:to-stone-200 dark:hover:from-white dark:hover:to-stone-100 text-white dark:text-[#0c100e] px-5 py-3 text-xs font-display font-bold transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg cursor-pointer">
-            <span>⬇️</span> Download HD Art
-          </button>
-        </div>
-
-        <!-- Generation Metadata Collapsible Accordion -->
-        <details id="metadata" class="w-full max-w-[620px] rounded-2xl bg-stone-50 dark:bg-[#0c100e]/80 border border-stone-200/80 dark:border-white/[0.08] group transition">
-          <summary class="cursor-pointer select-none list-none px-4 py-3.5 flex items-center justify-between text-xs font-semibold text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200">
-            <div class="flex items-center gap-2">
-              <span class="chev transition-transform text-xs opacity-75">▸</span>
-              <span>Prompt &amp; Generation Metadata</span>
-            </div>
-            <span class="text-[10px] font-mono opacity-60 group-open:hidden">View details</span>
-          </summary>
-          <div class="px-4 pb-4 space-y-3.5 text-xs border-t border-stone-200/60 dark:border-white/[0.04] pt-3">
-            <div>
-              <div class="flex items-center justify-between">
-                <span class="text-[10px] uppercase font-bold tracking-wider text-pastel-sage-700 dark:text-pastel-sage-300">Generated Visual Prompt</span>
-                <button data-copy="meta-prompt" class="text-[11px] font-medium text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white px-2.5 py-0.5 rounded-md bg-stone-200/70 dark:bg-white/[0.05] cursor-pointer">Copy</button>
-              </div>
-              <pre id="meta-prompt" class="mt-1.5 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-stone-800 dark:text-stone-300 bg-white dark:bg-black/40 border border-stone-200 dark:border-white/[0.04] rounded-xl p-3 max-h-36 overflow-y-auto shadow-inner">—</pre>
-            </div>
-            <div>
-              <div class="flex items-center justify-between">
-                <span class="text-[10px] uppercase font-bold tracking-wider text-stone-500">Negative Prompt (Avoid)</span>
-                <button data-copy="meta-negative" class="text-[11px] font-medium text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white px-2.5 py-0.5 rounded-md bg-stone-200/70 dark:bg-white/[0.05] cursor-pointer">Copy</button>
-              </div>
-              <pre id="meta-negative" class="mt-1.5 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-stone-600 dark:text-stone-400 bg-white dark:bg-black/40 border border-stone-200 dark:border-white/[0.04] rounded-xl p-3 shadow-inner">—</pre>
-            </div>
-            <dl id="meta-params" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-[11px] pt-1"></dl>
-          </div>
-        </details>
+      <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-white/[0.06]">
+        <button id="btn-key-clear" class="px-3.5 py-2 rounded-xl border border-white/[0.08] hover:bg-white/[0.04] text-xs text-stone-400 transition cursor-pointer">Clear</button>
+        <button id="btn-key-save" class="px-5 py-2 rounded-xl bg-canvas-mint hover:bg-emerald-400 text-[#07150e] font-display font-bold text-xs transition active:scale-95 shadow-md cursor-pointer">Save &amp; test</button>
       </div>
-    </section>
-  </main>
+    </div>
+  </div>
 
   <script>window.API_BASE = window.API_BASE || "";</script>
-  <script src="app.js?v=2.2.0"></script>
+  <script src="app.js?v=4.0.0"></script>
 </body>
 </html>
