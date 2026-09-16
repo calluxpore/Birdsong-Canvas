@@ -26,6 +26,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, Header, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,8 +47,9 @@ log = logging.getLogger("bird-sound-to-image")
 # --------------------------------------------------------------------------- #
 class Settings:
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "").strip()
+    fal_api_key: str = os.getenv("FAL_KEY", os.getenv("FAL_API_KEY", "")).strip()
     audio_model: str = os.getenv("GEMINI_AUDIO_MODEL", "gemini-3.5-flash")
-    image_model: str = os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image")
+    image_model: str = os.getenv("IMAGE_MODEL", os.getenv("GEMINI_IMAGE_MODEL", "fal-ai/fast-sdxl"))
     min_confidence: float = float(os.getenv("MIN_CONFIDENCE", "0.60"))
     max_audio_bytes: int = int(os.getenv("MAX_AUDIO_MB", "15")) * 1024 * 1024
     cors_origins: list[str] = [
@@ -243,6 +245,91 @@ class ImageStore:
 image_store = ImageStore()
 
 
+FAL_IMAGE_MODELS = [
+    "fal-ai/fast-sdxl",
+    "fal-ai/flux/schnell",
+    "fal-ai/sdxl-turbo",
+    "fal-ai/flux/dev",
+    "fal-ai/krea-realtime",
+]
+
+
+async def generate_fal_image(
+    prompt: str,
+    negative_prompt: str,
+    model: str,
+    aspect_ratio: str,
+    fal_key: str,
+) -> tuple[bytes, str]:
+    if not fal_key:
+        raise ApiError(401, "NO_FAL_KEY", "No Fal.ai API key. Paste your Fal.ai key in the API key panel.")
+
+    model_clean = model.strip()
+    if not model_clean.startswith("http"):
+        endpoint = f"https://fal.run/{model_clean}"
+    else:
+        endpoint = model_clean
+
+    dim_map = {
+        "1:1": {"width": 1024, "height": 1024},
+        "4:3": {"width": 1152, "height": 864},
+        "3:4": {"width": 864, "height": 1152},
+        "16:9": {"width": 1344, "height": 768},
+        "9:16": {"width": 768, "height": 1344},
+    }
+    dims = dim_map.get(aspect_ratio, {"width": 1024, "height": 1024})
+
+    payload: dict[str, Any] = {
+        "prompt": prompt,
+        "image_size": dims,
+        "num_images": 1,
+        "enable_safety_checker": True,
+    }
+    if negative_prompt:
+        payload["negative_prompt"] = negative_prompt
+
+    headers = {
+        "Authorization": f"Key {fal_key}",
+        "Content-Type": "application/json",
+    }
+
+    log.info("Sending request to Fal.ai model %s", model_clean)
+    async with httpx.AsyncClient(timeout=90.0) as http_client:
+        try:
+            res = await http_client.post(endpoint, json=payload, headers=headers)
+        except Exception as exc:
+            raise ApiError(502, "FAL_REQUEST_FAILED", f"Could not connect to Fal.ai: {exc}")
+
+        if res.status_code != 200:
+            err_msg = res.text
+            try:
+                err_data = res.json()
+                err_msg = str(err_data.get("detail", err_data.get("message", res.text)))
+            except Exception:
+                pass
+            if res.status_code in (401, 403):
+                raise ApiError(401, "INVALID_FAL_KEY", f"Fal.ai rejected the API key: {err_msg[:200]}")
+            raise ApiError(res.status_code, "FAL_ERROR", f"Fal.ai generation failed ({res.status_code}): {err_msg[:300]}")
+
+        data = res.json()
+        images = data.get("images") or []
+        if not images:
+            raise ApiError(502, "NO_IMAGE", "Fal.ai returned no image.")
+
+        img_url = images[0].get("url")
+        mime = images[0].get("content_type") or "image/png"
+
+        try:
+            img_res = await http_client.get(img_url)
+            if img_res.status_code != 200:
+                raise ApiError(502, "IMAGE_DOWNLOAD_FAILED", "Failed to download generated image from Fal.ai CDN.")
+            img_bytes = img_res.content
+        except Exception as exc:
+            raise ApiError(502, "IMAGE_DOWNLOAD_FAILED", f"Failed to download image from Fal.ai: {exc}")
+
+        return img_bytes, mime
+
+
 # --------------------------------------------------------------------------- #
 # API key / models                                                            #
 # --------------------------------------------------------------------------- #
@@ -250,6 +337,7 @@ image_store = ImageStore()
 async def api_config() -> dict[str, Any]:
     return {
         "server_key_configured": bool(settings.gemini_api_key),
+        "fal_key_configured": bool(settings.fal_api_key),
         "audio_model": settings.audio_model,
         "image_model": settings.image_model,
         "min_confidence": settings.min_confidence,
@@ -257,7 +345,10 @@ async def api_config() -> dict[str, Any]:
 
 
 @app.post("/api/key/check")
-async def api_key_check(x_gemini_api_key: str | None = Header(default=None)) -> dict[str, Any]:
+async def api_key_check(
+    x_gemini_api_key: str | None = Header(default=None),
+    x_fal_api_key: str | None = Header(default=None),
+) -> dict[str, Any]:
     """Validate the key by listing models; return models usable for each stage."""
     client = get_client(x_gemini_api_key)
     all_models: list[str] = []
@@ -286,21 +377,24 @@ async def api_key_check(x_gemini_api_key: str | None = Header(default=None)) -> 
             sorted_audio.append(m)
 
     usable_image = [m for m in image_models if not any(x in m for x in ("tts", "embedding", "robotics", "customtools"))]
-    sorted_image = [m for m in PREF_IMAGE if m in usable_image]
+    sorted_gemini_image = [m for m in PREF_IMAGE if m in usable_image]
     for m in sorted(usable_image):
-        if m not in sorted_image:
-            sorted_image.append(m)
+        if m not in sorted_gemini_image:
+            sorted_gemini_image.append(m)
+
+    # Combined list with Fal.ai models at the top
+    combined_image_models = list(FAL_IMAGE_MODELS) + sorted_gemini_image
 
     default_audio = sorted_audio[0] if sorted_audio else "gemini-3.5-flash"
-    default_image = sorted_image[0] if sorted_image else "gemini-3.1-flash-image"
+    default_image = combined_image_models[0] if combined_image_models else "fal-ai/fast-sdxl"
 
     log.info("FINAL RETURNED AUDIO MODELS: %s (default: %s)", sorted_audio, default_audio)
-    log.info("FINAL RETURNED IMAGE MODELS: %s (default: %s)", sorted_image, default_image)
+    log.info("FINAL RETURNED IMAGE MODELS: %s (default: %s)", combined_image_models, default_image)
 
     return {
         "valid": True,
         "audio_models": sorted_audio,
-        "image_models": sorted_image,
+        "image_models": combined_image_models,
         "default_audio_model": default_audio,
         "default_image_model": default_image,
     }
@@ -387,10 +481,9 @@ async def api_identify(
 
 
 # --------------------------------------------------------------------------- #
-# Stage 3: generate image (prompt -> Gemini image model)                      #
+# Stage 3: generate image (prompt -> Fal.ai or Gemini image model)            #
 # --------------------------------------------------------------------------- #
 def compose_image_prompt(req: GenerateRequest) -> str:
-    # Gemini image models have no separate negative-prompt field; fold it in.
     prompt = req.image_prompt.strip()
     if req.negative_prompt.strip():
         prompt += f"\n\nAvoid: {req.negative_prompt.strip()}."
@@ -398,10 +491,14 @@ def compose_image_prompt(req: GenerateRequest) -> str:
 
 
 @app.post("/api/generate")
-async def api_generate(req: GenerateRequest, x_gemini_api_key: str | None = Header(default=None)) -> dict[str, Any]:
-    client = get_client(x_gemini_api_key)
+async def api_generate(
+    req: GenerateRequest,
+    x_gemini_api_key: str | None = Header(default=None),
+    x_fal_api_key: str | None = Header(default=None),
+) -> dict[str, Any]:
     model = (req.model or "").strip() or settings.image_model
     prompt = compose_image_prompt(req)
+    fal_key = (x_fal_api_key or "").strip() or settings.fal_api_key
 
     log.info("Generating image with %s (%s, %s)", model, req.aspect_ratio, req.image_size)
     t0 = time.perf_counter()
@@ -409,42 +506,53 @@ async def api_generate(req: GenerateRequest, x_gemini_api_key: str | None = Head
     mime = "image/png"
     text_parts: list[str] = []
 
-    try:
-        if "imagen" in model.lower():
-            res = await client.aio.models.generate_images(
-                model=model,
-                prompt=prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    aspect_ratio=req.aspect_ratio,
-                    output_mime_type="image/png",
-                ),
-            )
-            if res.generated_images:
-                image_bytes = res.generated_images[0].image.image_bytes
-        else:
-            response = await client.aio.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["IMAGE"],
-                    image_config=types.ImageConfig(aspect_ratio=req.aspect_ratio),
-                ),
-            )
-            candidate = (response.candidates or [None])[0]
-            for part in (candidate.content.parts if candidate and candidate.content else None) or []:
-                if part.inline_data and part.inline_data.data and image_bytes is None:
-                    image_bytes = part.inline_data.data
-                    mime = part.inline_data.mime_type or "image/png"
-                elif part.text:
-                    text_parts.append(part.text)
-    except Exception as exc:
-        raise translate_gemini_error(exc, model, "image generation") from exc
+    if model.startswith("fal-") or model.startswith("fal/") or model in FAL_IMAGE_MODELS or (fal_key and not model.startswith("gemini")):
+        image_bytes, mime = await generate_fal_image(
+            prompt=req.image_prompt,
+            negative_prompt=req.negative_prompt,
+            model=model if (model.startswith("fal-") or model.startswith("fal/")) else "fal-ai/fast-sdxl",
+            aspect_ratio=req.aspect_ratio,
+            fal_key=fal_key,
+        )
+    else:
+        client = get_client(x_gemini_api_key)
+        try:
+            if "imagen" in model.lower():
+                res = await client.aio.models.generate_images(
+                    model=model,
+                    prompt=prompt,
+                    config=types.GenerateImagesConfig(
+                        number_of_images=1,
+                        aspect_ratio=req.aspect_ratio,
+                        output_mime_type="image/png",
+                    ),
+                )
+                if res.generated_images:
+                    image_bytes = res.generated_images[0].image.image_bytes
+            else:
+                response = await client.aio.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE"],
+                        image_config=types.ImageConfig(aspect_ratio=req.aspect_ratio),
+                    ),
+                )
+                candidate = (response.candidates or [None])[0]
+                for part in (candidate.content.parts if candidate and candidate.content else None) or []:
+                    if part.inline_data and part.inline_data.data and image_bytes is None:
+                        image_bytes = part.inline_data.data
+                        mime = part.inline_data.mime_type or "image/png"
+                    elif part.text:
+                        text_parts.append(part.text)
+        except Exception as exc:
+            raise translate_gemini_error(exc, model, "image generation") from exc
+
     elapsed = time.perf_counter() - t0
 
     if image_bytes is None:
         detail = " ".join(text_parts)[:300] or "No image returned by model"
-        raise ApiError(502, "NO_IMAGE", f"Gemini returned no image ({detail}). Try Regenerate.")
+        raise ApiError(502, "NO_IMAGE", f"Image generator returned no image ({detail}). Try Regenerate.")
 
     image_id = image_store.put(image_bytes, mime)
     return {

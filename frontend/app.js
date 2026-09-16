@@ -1,5 +1,5 @@
 /* Birdsong Canvas — frontend controller
- * Mic capture + visualizer → WAV → /api/identify (Gemini audio) → /api/generate (Gemini image)
+ * Mic capture + visualizer → WAV → /api/identify (Gemini audio) → /api/generate (Fal.ai / Gemini image)
  */
 (() => {
   "use strict";
@@ -39,12 +39,17 @@
     metaPrompt: $("meta-prompt"),
     metaNegative: $("meta-negative"),
     metaParams: $("meta-params"),
+    btnThemeToggle: $("btn-theme-toggle"),
+    iconSun: $("icon-sun"),
+    iconMoon: $("icon-moon"),
     keyToggle: $("btn-key-toggle"),
     keyDot: $("key-dot"),
     keyPillLabel: $("key-pill-label"),
     keyPanel: $("key-panel"),
     keyInput: $("api-key"),
     keyReveal: $("btn-key-reveal"),
+    falKeyInput: $("fal-key"),
+    falKeyReveal: $("btn-fal-reveal"),
     keySave: $("btn-key-save"),
     keyClear: $("btn-key-clear"),
     keyRemember: $("key-remember"),
@@ -65,6 +70,47 @@
     identification: null,   // last Gemini result
     lastImage: null,        // { image_url, parameters }
     staticWave: null,       // Float32Array for idle waveform display
+  };
+
+  // ------------------------------------------------------------------ Theme Manager
+  const THEME_KEY = "birdsong.theme";
+  const themeManager = {
+    init() {
+      const savedTheme = localStorage.getItem(THEME_KEY);
+      if (savedTheme === "dark" || (!savedTheme && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+        this.setTheme("dark");
+      } else if (savedTheme === "light") {
+        this.setTheme("light");
+      } else {
+        this.setTheme("dark"); // default dark
+      }
+
+      if (els.btnThemeToggle) {
+        els.btnThemeToggle.addEventListener("click", () => {
+          const isDark = document.documentElement.classList.contains("dark");
+          this.setTheme(isDark ? "light" : "dark");
+        });
+      }
+    },
+    setTheme(theme) {
+      if (theme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+      try {
+        localStorage.setItem(THEME_KEY, theme);
+      } catch (e) {
+        console.warn("Could not save theme preference:", e);
+      }
+      if (els.btnThemeToggle) {
+        els.btnThemeToggle.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+      }
+      if (!state.recording) drawIdle();
+    },
+    isDark() {
+      return document.documentElement.classList.contains("dark");
+    }
   };
 
   // ------------------------------------------------------------------ UI helpers
@@ -101,7 +147,7 @@
       warn: ["⚠️", "bg-amber-950/90 border-amber-500/30 text-amber-100"],
       info: ["ℹ️", "bg-stone-900/90 border-white/10 text-stone-100"],
     }[kind];
-    els.alert.className = `fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[min(92vw,640px)] rounded-xl border px-4 py-3 shadow-2xl backdrop-blur ${styles[1]}`;
+    els.alert.className = `fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[min(92vw,640px)] rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur ${styles[1]}`;
     els.alertIcon.textContent = styles[0];
     els.alertTitle.textContent = title;
     els.alertMessage.textContent = message;
@@ -136,6 +182,14 @@
         headers.set("X-Gemini-Api-Key", key);
       } catch (e) {
         console.warn("Could not set X-Gemini-Api-Key header:", e);
+      }
+    }
+    const falKey = keyStore.getFal();
+    if (falKey) {
+      try {
+        headers.set("X-Fal-Api-Key", falKey);
+      } catch (e) {
+        console.warn("Could not set X-Fal-Api-Key header:", e);
       }
     }
     try {
@@ -182,8 +236,12 @@
     const w = els.canvas.clientWidth, h = els.canvas.clientHeight;
     ctx2d.clearRect(0, 0, w, h);
     const wave = state.staticWave;
-    ctx2d.strokeStyle = wave ? "rgba(127,176,105,.8)" : "rgba(255,255,255,.12)";
-    ctx2d.lineWidth = 1;
+    const isDark = themeManager.isDark();
+    
+    ctx2d.strokeStyle = wave 
+      ? (isDark ? "rgba(117, 168, 117, 0.85)" : "rgba(62, 111, 62, 0.85)") 
+      : (isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.1)");
+    ctx2d.lineWidth = 1.25;
     ctx2d.beginPath();
     if (!wave) {
       ctx2d.moveTo(0, h / 2); ctx2d.lineTo(w, h / 2);
@@ -209,6 +267,7 @@
     analyser.getByteFrequencyData(freqData);
     analyser.getByteTimeDomainData(timeData);
     ctx2d.clearRect(0, 0, w, h);
+    const isDark = themeManager.isDark();
 
     // Frequency bars (log-ish distribution; birdsong mostly 1–8 kHz)
     const bars = Math.min(96, Math.floor(w / 6));
@@ -221,13 +280,18 @@
       for (let i = lo; i < hi; i++) sum += freqData[i];
       const v = sum / (hi - lo) / 255;
       const bh = Math.max(2, v * h * 0.9);
-      ctx2d.fillStyle = `rgba(${Math.round(95 + 60 * v)},${Math.round(148 + 60 * v)},${Math.round(72 + 30 * v)},${0.35 + 0.65 * v})`;
+      
+      if (isDark) {
+        ctx2d.fillStyle = `rgba(${Math.round(84 + 60 * v)},${Math.round(140 + 60 * v)},${Math.round(84 + 40 * v)},${0.35 + 0.65 * v})`;
+      } else {
+        ctx2d.fillStyle = `rgba(${Math.round(62 + 40 * v)},${Math.round(111 + 40 * v)},${Math.round(62 + 30 * v)},${0.4 + 0.6 * v})`;
+      }
       ctx2d.fillRect(b * barW + 1, h - bh, barW - 2, bh);
     }
 
     // Waveform overlay
-    ctx2d.strokeStyle = "rgba(231,239,228,.55)";
-    ctx2d.lineWidth = 1.25;
+    ctx2d.strokeStyle = isDark ? "rgba(227, 238, 227, 0.65)" : "rgba(40, 65, 45, 0.65)";
+    ctx2d.lineWidth = 1.35;
     ctx2d.beginPath();
     for (let i = 0; i < timeData.length; i++) {
       const x = (i / (timeData.length - 1)) * w;
@@ -463,7 +527,7 @@
     els.resConfLabel.textContent = `${pct}%`;
     els.resConfBar.style.width = `${pct}%`;
     els.resConfBar.className = `h-full rounded-full transition-all duration-700 ${
-      pct >= min_confidence * 100 ? "bg-moss-400" : pct >= 35 ? "bg-amber-400" : "bg-red-400"}`;
+      pct >= min_confidence * 100 ? "bg-pastel-sage-500 dark:bg-pastel-sage-400" : pct >= 35 ? "bg-amber-400" : "bg-red-400"}`;
     els.resConfThreshold.style.left = `${min_confidence * 100}%`;
     els.resHabitat.textContent = result.habitat_description || "—";
     els.resVisual.textContent = result.visual_description || "—";
@@ -481,7 +545,7 @@
 
     setBusy(true);
     setStep("generating");
-    setStatus(`Gemini is generating a photorealistic ${id.common_name || "bird"}…`);
+    setStatus(`Rendering photorealistic ${id.common_name || "bird"} portrait…`);
     els.imageEmpty.classList.add("hidden");
     els.imageLoading.classList.remove("hidden");
     const t0 = performance.now();
@@ -535,8 +599,12 @@
     els.metaParams.replaceChildren(...rows.map(([k, v]) => {
       const wrap = document.createElement("div");
       wrap.className = k === "Model notes" ? "col-span-2 sm:col-span-3" : "";
-      const dt = document.createElement("dt"); dt.className = "text-stone-500"; dt.textContent = k;
-      const dd = document.createElement("dd"); dd.className = "font-mono text-stone-300 break-all"; dd.textContent = String(v);
+      const dt = document.createElement("dt"); 
+      dt.className = "text-stone-500 dark:text-stone-400 font-medium"; 
+      dt.textContent = k;
+      const dd = document.createElement("dd"); 
+      dd.className = "font-mono text-stone-800 dark:text-stone-200 break-all font-semibold"; 
+      dd.textContent = String(v);
       wrap.append(dt, dd);
       return wrap;
     }));
@@ -564,6 +632,7 @@
 
   // ------------------------------------------------------------------ API key & settings
   const KEY_NAME = "birdsong.geminiKey";
+  const FAL_KEY_NAME = "birdsong.falKey";
   const PREFS_NAME = "birdsong.prefs";
   const safe = (fn, fallback = null) => { try { return fn(); } catch { return fallback; } };
   const sanitizeKey = (k) => (k || "").replace(/[^\x20-\x7E]/g, "").trim().replace(/^["'`]|["'`]$/g, "").trim();
@@ -576,7 +645,13 @@
       safe(() => { localStorage.removeItem(KEY_NAME); sessionStorage.removeItem(KEY_NAME); });
       if (clean) safe(() => (remember ? localStorage : sessionStorage).setItem(KEY_NAME, clean));
     },
-    remembered: () => !!safe(() => localStorage.getItem(KEY_NAME)),
+    getFal: () => sanitizeKey(safe(() => localStorage.getItem(FAL_KEY_NAME) || sessionStorage.getItem(FAL_KEY_NAME)) || ""),
+    setFal(key, remember) {
+      const clean = sanitizeKey(key);
+      safe(() => { localStorage.removeItem(FAL_KEY_NAME); sessionStorage.removeItem(FAL_KEY_NAME); });
+      if (clean) safe(() => (remember ? localStorage : sessionStorage).setItem(FAL_KEY_NAME, clean));
+    },
+    remembered: () => !!safe(() => localStorage.getItem(KEY_NAME) || localStorage.getItem(FAL_KEY_NAME)),
   };
 
   const prefs = {
@@ -590,12 +665,16 @@
   const maskKey = (k) => (k.length > 10 ? `${k.slice(0, 4)}…${k.slice(-4)}` : "set");
 
   function setKeyIndicator(ok, label) {
-    els.keyDot.className = `w-2 h-2 rounded-full ${ok === true ? "bg-moss-400" : ok === false ? "bg-red-400" : "bg-amber-400"}`;
+    els.keyDot.className = `w-2.5 h-2.5 rounded-full ${ok === true ? "bg-pastel-sage-500 dark:bg-pastel-sage-400 shadow-sm shadow-pastel-sage-500/50" : ok === false ? "bg-red-500" : "bg-amber-400"}`;
     els.keyPillLabel.textContent = label;
   }
 
   function setKeyStatus(text, kind = "muted") {
-    els.keyStatus.className = { ok: "text-moss-400", error: "text-red-300", muted: "text-stone-500" }[kind];
+    els.keyStatus.className = { 
+      ok: "text-pastel-sage-600 dark:text-pastel-sage-400 font-semibold", 
+      error: "text-red-600 dark:text-red-300 font-semibold", 
+      muted: "text-stone-500 dark:text-stone-400" 
+    }[kind];
     els.keyStatus.textContent = text;
   }
 
@@ -613,17 +692,21 @@
   async function checkKey({ quiet = false } = {}) {
     els.keySave.disabled = true;
     els.keySave.textContent = "Testing…";
-    setKeyStatus("Testing key with Google Gemini…");
+    setKeyStatus("Verifying API keys…");
     try {
       const data = await api("/api/key/check", { method: "POST" });
       const p = prefs.load();
       fillSelect(els.audioModel, data.audio_models, p.audioModel || data.default_audio_model);
       fillSelect(els.imageModel, data.image_models, p.imageModel || data.default_image_model);
       const k = keyStore.get();
-      setKeyIndicator(true, k ? `Key ${maskKey(k)}` : "Server key");
-      setKeyStatus(`✓ Key verified! ${data.audio_models.length} audio and ${data.image_models.length} image models available.`, "ok");
+      const fk = keyStore.getFal();
+      const labels = [];
+      if (k) labels.push(`Gemini: ${maskKey(k)}`);
+      if (fk) labels.push(`Fal: ${maskKey(fk)}`);
+      setKeyIndicator(true, labels.join(" | ") || "Server keys");
+      setKeyStatus(`✓ Keys verified! ${data.audio_models.length} audio models and ${data.image_models.length} image models available.`, "ok");
       els.keySave.textContent = "✓ Verified";
-      if (!quiet) showAlert("API key saved", "Gemini key verified and saved! You can record or upload audio now.", "info");
+      if (!quiet) showAlert("API keys saved", "API keys verified and saved! You can record or upload audio now.", "info");
       return true;
     } catch (err) {
       setKeyIndicator(false, err.code === "NO_API_KEY" ? "No API key" : "Key problem");
@@ -637,6 +720,8 @@
   }
 
   async function initSettings() {
+    themeManager.init();
+
     const p = prefs.load();
     if (p.aspectRatio) els.aspectRatio.value = p.aspectRatio;
     if (p.imageSize) els.imageSize.value = p.imageSize;
@@ -652,14 +737,17 @@
     fillSelect(els.imageModel, [p.imageModel || config.image_model]);
 
     const key = keyStore.get();
+    const falKey = keyStore.getFal();
     els.keyInput.value = key;
+    if (els.falKeyInput) els.falKeyInput.value = falKey;
     els.keyRemember.checked = keyStore.remembered();
-    if (key || config.server_key_configured) {
-      setKeyIndicator(null, "Checking key…");
+
+    if (key || falKey || config.server_key_configured) {
+      setKeyIndicator(null, "Checking keys…");
       await checkKey({ quiet: true });
     } else {
       setKeyIndicator(false, "No API key");
-      setKeyStatus("Paste your Google AI Studio key and click Save & test.");
+      setKeyStatus("Paste your Gemini & Fal.ai keys and click Save & test.");
       openKeyPanel(true);
     }
   }
@@ -670,14 +758,23 @@
     els.keyInput.type = hidden ? "text" : "password";
     els.keyReveal.textContent = hidden ? "Hide" : "Show";
   });
+  if (els.falKeyReveal) {
+    els.falKeyReveal.addEventListener("click", () => {
+      const hidden = els.falKeyInput.type === "password";
+      els.falKeyInput.type = hidden ? "text" : "password";
+      els.falKeyReveal.textContent = hidden ? "Hide" : "Show";
+    });
+  }
   els.keySave.addEventListener("click", async () => {
     const key = els.keyInput.value.trim();
-    if (!key) {
+    const falKey = els.falKeyInput ? els.falKeyInput.value.trim() : "";
+    if (!key && !falKey) {
       setKeyStatus("Please paste your Gemini API key first.", "error");
       els.keyInput.focus();
       return;
     }
-    keyStore.set(key, els.keyRemember.checked);
+    if (key) keyStore.set(key, els.keyRemember.checked);
+    if (falKey) keyStore.setFal(falKey, els.keyRemember.checked);
     const ok = await checkKey();
     if (ok) {
       setTimeout(() => {
@@ -687,15 +784,22 @@
     }
   });
   els.keyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") els.keySave.click(); });
+  if (els.falKeyInput) {
+    els.falKeyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") els.keySave.click(); });
+  }
   els.keyRemember.addEventListener("change", () => {
     const key = keyStore.get();
+    const falKey = keyStore.getFal();
     if (key) keyStore.set(key, els.keyRemember.checked);
+    if (falKey) keyStore.setFal(falKey, els.keyRemember.checked);
   });
   els.keyClear.addEventListener("click", () => {
     keyStore.set("", false);
+    keyStore.setFal("", false);
     els.keyInput.value = "";
+    if (els.falKeyInput) els.falKeyInput.value = "";
     setKeyIndicator(false, "No API key");
-    setKeyStatus("Key removed from this browser. The server's .env key (if any) will still be used.");
+    setKeyStatus("Keys removed from this browser.");
   });
   [els.audioModel, els.imageModel, els.aspectRatio, els.imageSize].forEach((s) => s.addEventListener("change", prefs.save));
 
