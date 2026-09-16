@@ -11,11 +11,11 @@ Record or upload a bird call. **Gemini** does all four steps:
 Browser (mic → 16-bit WAV)
    │  POST /api/identify   (audio + model)          header: X-Gemini-Api-Key
    ▼
-main.py ──► Gemini audio model (e.g. gemini-3.5-flash, JSON schema)
+main.py ──► Gemini audio model (e.g. gemini-2.0-flash, JSON schema)
             → species, confidence, habitat, visual description, image_prompt, negative_prompt
    │  POST /api/generate   (prompt, model, aspect ratio, resolution)
    ▼
-main.py ──► Gemini image model (e.g. gemini-3.1-flash-image) → image bytes → GET /api/images/{id}
+main.py ──► Gemini image model (e.g. gemini-2.0-flash-exp, imagen-3.0-generate-002) → image bytes → GET /api/images/{id}
 ```
 
 ## Files
@@ -52,14 +52,14 @@ Open **http://127.0.0.1:8000**. Browsers only allow the microphone on localhost 
 
 ## ⚠️ Image generation needs billing
 
-The Gemini image models (`gemini-3.1-flash-image`, `gemini-2.5-flash-image`, `gemini-3-pro-image`, …) have a free-tier quota of **0**. If you see "No quota for this model", enable billing for the key's project in [Google AI Studio](https://aistudio.google.com) and try again. Audio recognition works on the free tier.
+The Gemini image models (`gemini-2.0-flash-exp`, `imagen-3.0-generate-002`, …) may have a free-tier quota of **0**. If you see "No quota for this model", enable billing for the key's project in [Google AI Studio](https://aistudio.google.com) and try again. Audio recognition works on the free tier.
 
 ## Settings (UI or `.env`)
 
 | Setting | Default | Notes |
 |---|---|---|
-| Recognition model | `gemini-3.5-flash` | Any audio-capable Gemini model; `gemini-3.1-pro-preview` is more accurate but slower |
-| Image model | `gemini-3.1-flash-image` | `gemini-3-pro-image` for highest quality |
+| Recognition model | `gemini-2.0-flash` | Any audio-capable Gemini model; `gemini-1.5-pro` is more accurate |
+| Image model | `gemini-2.0-flash-exp` | `imagen-3.0-generate-002` or `gemini-2.0-flash-exp` |
 | Aspect ratio | `1:1` | 1:1, 4:3, 3:4, 16:9, 9:16 |
 | Resolution | `1K` | 1K or 2K |
 | `MIN_CONFIDENCE` | `0.60` | Below this, you're asked to re-record, with a "Generate anyway" option |

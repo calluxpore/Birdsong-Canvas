@@ -66,6 +66,10 @@ ALLOWED_AUDIO_MIME = {
     "audio/vnd.wave": "audio/wav",
     "audio/mpeg": "audio/mp3",
     "audio/mp3": "audio/mp3",
+    "audio/mp4": "audio/mp4",
+    "audio/m4a": "audio/mp4",
+    "audio/x-m4a": "audio/mp4",
+    "audio/webm": "audio/webm",
     "audio/ogg": "audio/ogg",
     "audio/flac": "audio/flac",
     "audio/x-flac": "audio/flac",
@@ -76,6 +80,9 @@ ALLOWED_AUDIO_MIME = {
 EXTENSION_MIME = {
     ".wav": "audio/wav",
     ".mp3": "audio/mp3",
+    ".mp4": "audio/mp4",
+    ".m4a": "audio/mp4",
+    ".webm": "audio/webm",
     ".ogg": "audio/ogg",
     ".flac": "audio/flac",
     ".aac": "audio/aac",
@@ -173,6 +180,7 @@ _clients: OrderedDict[str, genai.Client] = OrderedDict()
 
 def get_client(header_key: str | None) -> genai.Client:
     api_key = (header_key or "").strip() or settings.gemini_api_key
+    api_key = "".join(c for c in api_key if 32 <= ord(c) <= 126).strip().strip("\"'").strip()
     if not api_key:
         raise ApiError(401, "NO_API_KEY", "No Gemini API key. Paste your Google AI Studio key in the API key panel.")
     digest = hashlib.sha256(api_key.encode()).hexdigest()
@@ -252,25 +260,49 @@ async def api_config() -> dict[str, Any]:
 async def api_key_check(x_gemini_api_key: str | None = Header(default=None)) -> dict[str, Any]:
     """Validate the key by listing models; return models usable for each stage."""
     client = get_client(x_gemini_api_key)
+    all_models: list[str] = []
     audio_models: list[str] = []
     image_models: list[str] = []
     try:
         async for m in await client.aio.models.list():
-            name = (m.name or "").removeprefix("models/")
-            if "generateContent" not in (m.supported_actions or []):
-                continue
-            if "image" in name:
-                image_models.append(name)
-            elif name.startswith("gemini") and not any(x in name for x in ("tts", "audio", "live", "embedding", "customtools", "robotics")):
+            raw_name = m.name or ""
+            name = raw_name.removeprefix("models/")
+            actions = m.supported_actions or []
+            all_models.append(name)
+            if "generateContent" in actions:
                 audio_models.append(name)
+            if "generateImages" in actions or "imagen" in name:
+                image_models.append(name)
     except Exception as exc:
         raise translate_gemini_error(exc, "models.list", "key check") from exc
+
+    PREF_AUDIO = ["gemini-3.5-flash", "gemini-3.7-flash", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"]
+    PREF_IMAGE = ["gemini-3.1-flash-image", "gemini-2.5-flash-image", "gemini-3-pro-image", "gemini-3.1-flash-lite-image"]
+
+    usable_audio = [m for m in audio_models if not any(x in m for x in ("tts", "embedding", "robotics", "customtools", "computer-use", "native-audio"))]
+    sorted_audio = [m for m in PREF_AUDIO if m in usable_audio]
+    for m in sorted(usable_audio):
+        if m not in sorted_audio:
+            sorted_audio.append(m)
+
+    usable_image = [m for m in image_models if not any(x in m for x in ("tts", "embedding", "robotics", "customtools"))]
+    sorted_image = [m for m in PREF_IMAGE if m in usable_image]
+    for m in sorted(usable_image):
+        if m not in sorted_image:
+            sorted_image.append(m)
+
+    default_audio = sorted_audio[0] if sorted_audio else "gemini-3.5-flash"
+    default_image = sorted_image[0] if sorted_image else "gemini-3.1-flash-image"
+
+    log.info("FINAL RETURNED AUDIO MODELS: %s (default: %s)", sorted_audio, default_audio)
+    log.info("FINAL RETURNED IMAGE MODELS: %s (default: %s)", sorted_image, default_image)
+
     return {
         "valid": True,
-        "audio_models": sorted(audio_models, reverse=True),
-        "image_models": sorted(image_models, reverse=True),
-        "default_audio_model": settings.audio_model,
-        "default_image_model": settings.image_model,
+        "audio_models": sorted_audio,
+        "image_models": sorted_image,
+        "default_audio_model": default_audio,
+        "default_image_model": default_image,
     }
 
 
@@ -373,36 +405,48 @@ async def api_generate(req: GenerateRequest, x_gemini_api_key: str | None = Head
 
     log.info("Generating image with %s (%s, %s)", model, req.aspect_ratio, req.image_size)
     t0 = time.perf_counter()
+    image_bytes = None
+    mime = "image/png"
+    text_parts: list[str] = []
+
     try:
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE"],
-                image_config=types.ImageConfig(aspect_ratio=req.aspect_ratio, image_size=req.image_size),
-            ),
-        )
+        if "imagen" in model.lower():
+            res = await client.aio.models.generate_images(
+                model=model,
+                prompt=prompt,
+                config=types.GenerateImagesConfig(
+                    number_of_images=1,
+                    aspect_ratio=req.aspect_ratio,
+                    output_mime_type="image/png",
+                ),
+            )
+            if res.generated_images:
+                image_bytes = res.generated_images[0].image.image_bytes
+        else:
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["IMAGE"],
+                    image_config=types.ImageConfig(aspect_ratio=req.aspect_ratio),
+                ),
+            )
+            candidate = (response.candidates or [None])[0]
+            for part in (candidate.content.parts if candidate and candidate.content else None) or []:
+                if part.inline_data and part.inline_data.data and image_bytes is None:
+                    image_bytes = part.inline_data.data
+                    mime = part.inline_data.mime_type or "image/png"
+                elif part.text:
+                    text_parts.append(part.text)
     except Exception as exc:
         raise translate_gemini_error(exc, model, "image generation") from exc
     elapsed = time.perf_counter() - t0
 
-    image_part = None
-    text_parts: list[str] = []
-    candidate = (response.candidates or [None])[0]
-    for part in (candidate.content.parts if candidate and candidate.content else None) or []:
-        if part.inline_data and part.inline_data.data and image_part is None:
-            image_part = part.inline_data
-        elif part.text:
-            text_parts.append(part.text)
-
-    if image_part is None:
-        reason = str(candidate.finish_reason) if candidate and candidate.finish_reason else "unknown"
-        feedback = response.prompt_feedback.block_reason if response.prompt_feedback else None
-        detail = " ".join(text_parts)[:300] or f"finish reason: {feedback or reason}"
+    if image_bytes is None:
+        detail = " ".join(text_parts)[:300] or "No image returned by model"
         raise ApiError(502, "NO_IMAGE", f"Gemini returned no image ({detail}). Try Regenerate.")
 
-    mime = image_part.mime_type or "image/png"
-    image_id = image_store.put(image_part.data, mime)
+    image_id = image_store.put(image_bytes, mime)
     return {
         "image_id": image_id,
         "image_url": f"/api/images/{image_id}",

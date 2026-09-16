@@ -130,10 +130,20 @@
   async function api(path, options = {}) {
     let res;
     const headers = new Headers(options.headers || {});
-    if (keyStore.get()) headers.set("X-Gemini-Api-Key", keyStore.get());
+    const key = keyStore.get();
+    if (key) {
+      try {
+        headers.set("X-Gemini-Api-Key", key);
+      } catch (e) {
+        console.warn("Could not set X-Gemini-Api-Key header:", e);
+      }
+    }
     try {
       res = await fetch(API + path, { ...options, headers });
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException || err.name === "TypeError") {
+        throw new ApiError("REQUEST_FAILED", err.message || "Failed to make request.");
+      }
       throw new ApiError("BACKEND_UNREACHABLE", "Could not reach the backend server. Start it with: .venv\\Scripts\\python -m uvicorn main:app --port 8000 — then open http://127.0.0.1:8000");
     }
     const body = await res.json().catch(() => null);
@@ -556,13 +566,15 @@
   const KEY_NAME = "birdsong.geminiKey";
   const PREFS_NAME = "birdsong.prefs";
   const safe = (fn, fallback = null) => { try { return fn(); } catch { return fallback; } };
+  const sanitizeKey = (k) => (k || "").replace(/[^\x20-\x7E]/g, "").trim().replace(/^["'`]|["'`]$/g, "").trim();
 
   // "Remember" keeps the key in localStorage; otherwise it lives only for this tab (sessionStorage).
   const keyStore = {
-    get: () => safe(() => localStorage.getItem(KEY_NAME) || sessionStorage.getItem(KEY_NAME)) || "",
+    get: () => sanitizeKey(safe(() => localStorage.getItem(KEY_NAME) || sessionStorage.getItem(KEY_NAME)) || ""),
     set(key, remember) {
+      const clean = sanitizeKey(key);
       safe(() => { localStorage.removeItem(KEY_NAME); sessionStorage.removeItem(KEY_NAME); });
-      if (key) safe(() => (remember ? localStorage : sessionStorage).setItem(KEY_NAME, key));
+      if (clean) safe(() => (remember ? localStorage : sessionStorage).setItem(KEY_NAME, clean));
     },
     remembered: () => !!safe(() => localStorage.getItem(KEY_NAME)),
   };
@@ -600,7 +612,8 @@
 
   async function checkKey({ quiet = false } = {}) {
     els.keySave.disabled = true;
-    setKeyStatus("Testing key…");
+    els.keySave.textContent = "Testing…";
+    setKeyStatus("Testing key with Google Gemini…");
     try {
       const data = await api("/api/key/check", { method: "POST" });
       const p = prefs.load();
@@ -608,12 +621,14 @@
       fillSelect(els.imageModel, data.image_models, p.imageModel || data.default_image_model);
       const k = keyStore.get();
       setKeyIndicator(true, k ? `Key ${maskKey(k)}` : "Server key");
-      setKeyStatus(`✓ Key valid — ${data.audio_models.length} recognition and ${data.image_models.length} image models available.`, "ok");
-      if (!quiet) showAlert("API key saved", "Gemini key works. You can record or upload audio now.", "info");
+      setKeyStatus(`✓ Key verified! ${data.audio_models.length} audio and ${data.image_models.length} image models available.`, "ok");
+      els.keySave.textContent = "✓ Verified";
+      if (!quiet) showAlert("API key saved", "Gemini key verified and saved! You can record or upload audio now.", "info");
       return true;
     } catch (err) {
       setKeyIndicator(false, err.code === "NO_API_KEY" ? "No API key" : "Key problem");
       setKeyStatus(err.message, "error");
+      els.keySave.textContent = "Save & test";
       openKeyPanel(true);
       return false;
     } finally {
@@ -657,9 +672,19 @@
   });
   els.keySave.addEventListener("click", async () => {
     const key = els.keyInput.value.trim();
-    if (!key) { setKeyStatus("Paste a key first.", "error"); els.keyInput.focus(); return; }
+    if (!key) {
+      setKeyStatus("Please paste your Gemini API key first.", "error");
+      els.keyInput.focus();
+      return;
+    }
     keyStore.set(key, els.keyRemember.checked);
-    if (await checkKey()) openKeyPanel(false);
+    const ok = await checkKey();
+    if (ok) {
+      setTimeout(() => {
+        openKeyPanel(false);
+        els.keySave.textContent = "Save & test";
+      }, 900);
+    }
   });
   els.keyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") els.keySave.click(); });
   els.keyRemember.addEventListener("change", () => {
@@ -694,8 +719,23 @@
   els.btnDownload.addEventListener("click", downloadImage);
   document.querySelectorAll("[data-copy]").forEach((btn) =>
     btn.addEventListener("click", async () => {
-      await navigator.clipboard.writeText($(btn.dataset.copy).textContent);
-      btn.textContent = "Copied"; setTimeout(() => (btn.textContent = "Copy"), 1200);
+      const text = $(btn.dataset.copy)?.textContent || "";
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          ta.remove();
+        }
+        btn.textContent = "Copied";
+        setTimeout(() => (btn.textContent = "Copy"), 1200);
+      } catch {
+        showAlert("Copy failed", "Could not copy text to clipboard.", "info");
+      }
     }));
 
   window.addEventListener("resize", sizeCanvas);

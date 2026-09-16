@@ -128,7 +128,7 @@
         <span class="text-stone-600 text-sm">or</span>
         <label class="inline-flex items-center gap-2 rounded-xl border border-white/10 hover:border-white/25 px-4 py-2.5 text-sm cursor-pointer transition">
           📁 Upload audio
-          <input id="file-input" type="file" accept="audio/wav,audio/x-wav,audio/mpeg,audio/mp3,audio/ogg,audio/flac,audio/aac,.wav,.mp3,.ogg,.flac,.aac,.aiff" class="hidden" />
+          <input id="file-input" type="file" accept="audio/wav,audio/x-wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/x-m4a,audio/webm,audio/ogg,audio/flac,audio/aac,.wav,.mp3,.mp4,.m4a,.webm,.ogg,.flac,.aac,.aiff,.aif" class="hidden" />
         </label>
       </div>
       <audio id="playback" controls class="hidden w-full h-10 opacity-80"></audio>
@@ -215,6 +215,6 @@
   </main>
 
   <script>window.API_BASE = window.API_BASE || "";</script>
-  <script src="app.js"></script>
+  <script src="app.js?v=2.0.4"></script>
 </body>
 </html>
