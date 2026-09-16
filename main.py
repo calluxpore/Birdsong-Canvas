@@ -17,6 +17,7 @@ Then open http://127.0.0.1:8000
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -46,12 +47,12 @@ log = logging.getLogger("bird-sound-to-image")
 
 
 # --------------------------------------------------------------------------- #
-# Configuration                                                               #
+# Configuration & validation                                                  #
 # --------------------------------------------------------------------------- #
 class Settings:
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "").strip()
     fal_api_key: str = os.getenv("FAL_KEY", os.getenv("FAL_API_KEY", "")).strip()
-    audio_model: str = os.getenv("GEMINI_AUDIO_MODEL", "gemini-3.5-flash")
+    audio_model: str = os.getenv("GEMINI_AUDIO_MODEL", "gemini-2.5-flash")
     image_model: str = os.getenv("IMAGE_MODEL", os.getenv("GEMINI_IMAGE_MODEL", "fal-ai/fast-sdxl"))
     min_confidence: float = float(os.getenv("MIN_CONFIDENCE", "0.60"))
     generation_seed: int = int(os.getenv("GENERATION_SEED", "42"))
@@ -383,7 +384,7 @@ async def api_key_check(
     except Exception as exc:
         raise translate_gemini_error(exc, "models.list", "key check") from exc
 
-    PREF_AUDIO = ["gemini-3.5-flash", "gemini-3.7-flash", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"]
+    PREF_AUDIO = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-pro", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.7-flash"]
     PREF_IMAGE = ["gemini-3.1-flash-image", "gemini-2.5-flash-image", "gemini-3-pro-image", "gemini-3.1-flash-lite-image"]
 
     usable_audio = [m for m in audio_models if not any(x in m for x in ("tts", "embedding", "robotics", "customtools", "computer-use", "native-audio"))]
@@ -429,35 +430,51 @@ def resolve_mime(upload: UploadFile) -> str:
     raise ApiError(415, "UNSUPPORTED_AUDIO", f"Unsupported audio type '{ctype or ext or 'unknown'}'. Use WAV, MP3, OGG, FLAC, AAC or AIFF.")
 
 
-async def identify_bird(client: genai.Client, model: str, audio: bytes, mime_type: str) -> BirdIdentification:
-    try:
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=[
-                types.Part.from_bytes(data=audio, mime_type=mime_type),
-                "Identify the bird in this recording and return the JSON object.",
-            ],
-            config=types.GenerateContentConfig(
-                system_instruction=AUDIO_SYSTEM_PROMPT,
-                response_mime_type="application/json",
-                response_schema=BirdIdentification,
-                temperature=0.0,
-                seed=settings.generation_seed,
-            ),
-        )
-    except Exception as exc:
-        raise translate_gemini_error(exc, model, "audio recognition") from exc
+async def identify_bird(client: genai.Client, model: str, audio: bytes, mime_type: str) -> tuple[BirdIdentification, str]:
+    fallback_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-pro", "gemini-3.5-flash", "gemini-3.5-flash-lite"]
+    candidates = [model] + [m for m in fallback_models if m != model]
 
-    result = response.parsed
-    if not isinstance(result, BirdIdentification):
-        try:
-            result = BirdIdentification.model_validate_json(response.text or "")
-        except Exception as exc:
-            log.error("Unparseable Gemini output: %r", response.text)
-            raise ApiError(502, "GEMINI_BAD_OUTPUT", "Gemini returned output that did not match the expected JSON schema.") from exc
+    last_exc: Exception | None = None
+    for candidate in candidates:
+        for attempt in range(2):
+            try:
+                log.info("Attempting audio identification with %s (attempt %d)", candidate, attempt + 1)
+                response = await client.aio.models.generate_content(
+                    model=candidate,
+                    contents=[
+                        types.Part.from_bytes(data=audio, mime_type=mime_type),
+                        "Identify the bird in this recording and return the JSON object.",
+                    ],
+                    config=types.GenerateContentConfig(
+                        system_instruction=AUDIO_SYSTEM_PROMPT,
+                        response_mime_type="application/json",
+                        response_schema=BirdIdentification,
+                        temperature=0.0,
+                        seed=settings.generation_seed,
+                    ),
+                )
 
-    result.confidence = max(0.0, min(1.0, float(result.confidence)))
-    return result
+                result = response.parsed
+                if not isinstance(result, BirdIdentification):
+                    try:
+                        result = BirdIdentification.model_validate_json(response.text or "")
+                    except Exception as exc:
+                        log.error("Unparseable Gemini output from %s: %r", candidate, response.text)
+                        raise ApiError(502, "GEMINI_BAD_OUTPUT", "Gemini returned output that did not match the expected JSON schema.") from exc
+
+                result.confidence = max(0.0, min(1.0, float(result.confidence)))
+                return result, candidate
+            except Exception as exc:
+                last_exc = exc
+                err_text = str(exc)
+                log.warning("Audio identification failed with %s (attempt %d): %s", candidate, attempt + 1, err_text)
+                if "503" in err_text or "high demand" in err_text or "429" in err_text or "ResourceExhausted" in err_text:
+                    await asyncio.sleep(1.0)
+                    continue
+                else:
+                    break
+
+    raise translate_gemini_error(last_exc or RuntimeError("All audio models failed"), model, "audio recognition")
 
 
 @app.post("/api/identify")
@@ -467,7 +484,7 @@ async def api_identify(
     x_gemini_api_key: str | None = Header(default=None),
 ) -> dict[str, Any]:
     client = get_client(x_gemini_api_key)
-    model = (model or "").strip() or settings.audio_model
+    requested_model = (model or "").strip() or settings.audio_model
     mime_type = resolve_mime(audio)
     data = await audio.read()
     if not data:
@@ -487,8 +504,8 @@ async def api_identify(
     rec_path = RECORDINGS_DIR / safe_name
     rec_path.write_bytes(data)
 
-    log.info("Saved %s and identifying (%d bytes, %s) with %s", safe_name, len(data), mime_type, model)
-    result = await identify_bird(client, model, data, mime_type)
+    log.info("Saved %s and identifying (%d bytes, %s) with requested model %s", safe_name, len(data), mime_type, requested_model)
+    result, actual_model = await identify_bird(client, requested_model, data, mime_type)
 
     if not result.identified or not result.common_name:
         status, message = "no_bird", "No bird vocalization was detected. Move closer to the bird, reduce background noise and record again."
@@ -504,7 +521,7 @@ async def api_identify(
         "status": status,
         "message": message,
         "min_confidence": settings.min_confidence,
-        "model": model,
+        "model": actual_model,
         "result": result.model_dump(),
         "audio_record": {
             "filename": safe_name,
