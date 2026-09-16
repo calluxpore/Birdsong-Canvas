@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Birdsong Canvas — Bird Sound to Image</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'sans-serif'] },
+          colors: { moss: { 50: '#f3f7f2', 400: '#7fb069', 500: '#5f9448', 600: '#4a7638' } },
+        },
+      },
+    };
+  </script>
+  <style>
+    .step[data-state="active"] .dot { background: #7fb069; box-shadow: 0 0 0 4px rgba(127,176,105,.25); animation: pulse 1.2s infinite; }
+    .step[data-state="done"] .dot { background: #7fb069; }
+    .step[data-state="error"] .dot { background: #ef4444; }
+    .step[data-state="active"] .label, .step[data-state="done"] .label { color: #e7efe4; }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(127,176,105,.08); } }
+    details[open] summary .chev { transform: rotate(90deg); }
+    .shimmer { background: linear-gradient(100deg, #1c2320 30%, #26302b 50%, #1c2320 70%); background-size: 200% 100%; animation: shimmer 1.6s infinite linear; }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+  </style>
+</head>
+<body class="h-full bg-[#0f1412] text-stone-200 font-sans antialiased">
+  <!-- Alert banner -->
+  <div id="alert" class="hidden fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[min(92vw,640px)] rounded-xl border px-4 py-3 shadow-2xl backdrop-blur" role="alert">
+    <div class="flex items-start gap-3">
+      <span id="alert-icon" class="text-lg leading-none mt-0.5">⚠️</span>
+      <div class="flex-1">
+        <p id="alert-title" class="font-semibold text-sm"></p>
+        <p id="alert-message" class="text-sm opacity-90 mt-0.5"></p>
+      </div>
+      <button id="alert-close" class="opacity-60 hover:opacity-100 text-lg leading-none" aria-label="Dismiss">×</button>
+    </div>
+  </div>
+
+  <header class="border-b border-white/5 px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="text-xl">🪶</span>
+      <h1 class="font-semibold tracking-tight">Birdsong Canvas</h1>
+      <span class="hidden sm:inline text-xs text-stone-500 ml-2">Gemini listens → recognises → writes a prompt → paints the bird</span>
+    </div>
+    <button id="btn-key-toggle" class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 text-stone-300 transition" aria-expanded="false" aria-controls="key-panel">
+      <span id="key-dot" class="w-2 h-2 rounded-full bg-stone-600"></span>
+      <span id="key-pill-label">API key</span>
+      <span aria-hidden="true">⚙️</span>
+    </button>
+  </header>
+
+  <!-- API key & model settings -->
+  <section id="key-panel" class="hidden border-b border-white/5 bg-[#131916] px-6 py-5">
+    <div class="max-w-5xl mx-auto grid gap-5 lg:grid-cols-[1.3fr_1fr]">
+      <div>
+        <label for="api-key" class="text-xs uppercase tracking-[0.18em] text-stone-500">Google AI Studio API key</label>
+        <div class="mt-2 flex gap-2">
+          <div class="relative flex-1">
+            <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Gemini API key…"
+              class="w-full bg-[#0f1412] border border-white/10 focus:border-moss-400 outline-none rounded-lg pl-3 pr-16 py-2 font-mono text-sm text-stone-200" />
+            <button id="btn-key-reveal" type="button" class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-stone-500 hover:text-stone-200">Show</button>
+          </div>
+          <button id="btn-key-save" class="rounded-lg bg-moss-500 hover:bg-moss-400 text-[#0f1412] font-semibold px-4 text-sm transition disabled:opacity-40">Save &amp; test</button>
+          <button id="btn-key-clear" class="rounded-lg border border-white/10 hover:border-white/25 px-3 text-sm text-stone-400 transition">Clear</button>
+        </div>
+        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <label class="flex items-center gap-1.5 text-stone-400 cursor-pointer">
+            <input id="key-remember" type="checkbox" class="accent-[#7fb069]" /> Remember in this browser
+          </label>
+          <span id="key-status" class="text-stone-500">Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline underline-offset-2 hover:text-stone-300">aistudio.google.com/apikey</a></span>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <label class="flex flex-col gap-1 col-span-2 sm:col-span-1">
+          <span class="text-xs text-stone-500">Listening / recognition model</span>
+          <select id="audio-model" class="bg-[#0f1412] border border-white/10 rounded-lg px-2 py-1.5 text-stone-200"></select>
+        </label>
+        <label class="flex flex-col gap-1 col-span-2 sm:col-span-1">
+          <span class="text-xs text-stone-500">Image model</span>
+          <select id="image-model" class="bg-[#0f1412] border border-white/10 rounded-lg px-2 py-1.5 text-stone-200"></select>
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-stone-500">Aspect ratio</span>
+          <select id="aspect-ratio" class="bg-[#0f1412] border border-white/10 rounded-lg px-2 py-1.5 text-stone-200">
+            <option>1:1</option><option>4:3</option><option>3:4</option><option>16:9</option><option>9:16</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-stone-500">Resolution</span>
+          <select id="image-size" class="bg-[#0f1412] border border-white/10 rounded-lg px-2 py-1.5 text-stone-200">
+            <option value="1K">1K</option><option value="2K">2K</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <main class="grid lg:grid-cols-2 gap-px bg-white/5 min-h-[calc(100%-53px)]">
+    <!-- ============ LEFT: Audio Input & Analysis ============ -->
+    <section class="bg-[#0f1412] p-6 lg:p-8 flex flex-col gap-6">
+      <h2 class="text-xs uppercase tracking-[0.18em] text-stone-500">Audio Input &amp; Analysis</h2>
+
+      <!-- Visualizer -->
+      <div class="relative rounded-2xl bg-[#151b18] border border-white/5 overflow-hidden">
+        <canvas id="visualizer" class="w-full h-44 block"></canvas>
+        <div id="rec-badge" class="hidden absolute top-3 left-3 flex items-center gap-2 text-xs bg-red-500/15 text-red-300 px-2 py-1 rounded-full">
+          <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+          <span>REC <span id="rec-timer">0.0</span>s</span>
+        </div>
+        <div class="absolute bottom-0 left-0 h-1 bg-moss-400 transition-[width] duration-100" id="rec-progress" style="width:0"></div>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="btn-record" class="inline-flex items-center gap-2 rounded-xl bg-moss-500 hover:bg-moss-400 text-[#0f1412] font-semibold px-5 py-2.5 transition disabled:opacity-40 disabled:cursor-not-allowed">
+          <span id="btn-record-icon">🎙️</span><span id="btn-record-label">Record / Listen</span>
+        </button>
+        <label class="flex items-center gap-2 text-sm text-stone-400">
+          Duration
+          <select id="duration" class="bg-[#151b18] border border-white/10 rounded-lg px-2 py-1.5 text-stone-200">
+            <option value="5">5 s</option><option value="6">6 s</option><option value="7">7 s</option>
+            <option value="8" selected>8 s</option><option value="9">9 s</option><option value="10">10 s</option>
+          </select>
+        </label>
+        <span class="text-stone-600 text-sm">or</span>
+        <label class="inline-flex items-center gap-2 rounded-xl border border-white/10 hover:border-white/25 px-4 py-2.5 text-sm cursor-pointer transition">
+          📁 Upload audio
+          <input id="file-input" type="file" accept="audio/wav,audio/x-wav,audio/mpeg,audio/mp3,audio/ogg,audio/flac,audio/aac,.wav,.mp3,.ogg,.flac,.aac,.aiff" class="hidden" />
+        </label>
+      </div>
+      <audio id="playback" controls class="hidden w-full h-10 opacity-80"></audio>
+
+      <!-- Status pipeline -->
+      <ol id="pipeline" class="grid grid-cols-4 gap-2 text-xs">
+        <li class="step" data-step="listening" data-state="idle"><div class="flex items-center gap-2"><span class="dot w-2.5 h-2.5 rounded-full bg-stone-700 shrink-0"></span><span class="label text-stone-500">Listening</span></div></li>
+        <li class="step" data-step="analyzing" data-state="idle"><div class="flex items-center gap-2"><span class="dot w-2.5 h-2.5 rounded-full bg-stone-700 shrink-0"></span><span class="label text-stone-500">Analyzing Audio</span></div></li>
+        <li class="step" data-step="generating" data-state="idle"><div class="flex items-center gap-2"><span class="dot w-2.5 h-2.5 rounded-full bg-stone-700 shrink-0"></span><span class="label text-stone-500">Generating Visual</span></div></li>
+        <li class="step" data-step="complete" data-state="idle"><div class="flex items-center gap-2"><span class="dot w-2.5 h-2.5 rounded-full bg-stone-700 shrink-0"></span><span class="label text-stone-500">Complete</span></div></li>
+      </ol>
+      <p id="status-text" class="text-sm text-stone-400 -mt-3">Press <b>Record / Listen</b> near a singing bird, or upload a WAV/MP3 clip.</p>
+
+      <!-- Results -->
+      <div id="results" class="hidden rounded-2xl bg-[#151b18] border border-white/5 p-5 space-y-4">
+        <div id="low-conf" class="hidden rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-200 text-sm px-3 py-2"></div>
+        <div>
+          <p class="text-xs uppercase tracking-wider text-stone-500">Detected species</p>
+          <p id="res-common" class="text-2xl font-semibold mt-1">—</p>
+          <p id="res-scientific" class="italic text-stone-400">—</p>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs text-stone-500 mb-1"><span>Confidence</span><span id="res-conf-label">0%</span></div>
+          <div class="h-2 rounded-full bg-white/5 overflow-hidden relative">
+            <div id="res-conf-bar" class="h-full rounded-full transition-all duration-700" style="width:0"></div>
+            <div id="res-conf-threshold" class="absolute top-0 bottom-0 w-px bg-white/40" style="left:60%" title="Minimum confidence"></div>
+          </div>
+        </div>
+        <div>
+          <p class="text-xs uppercase tracking-wider text-stone-500">Native habitat</p>
+          <p id="res-habitat" class="text-sm text-stone-300 mt-1 leading-relaxed">—</p>
+        </div>
+        <div>
+          <p class="text-xs uppercase tracking-wider text-stone-500">Field marks</p>
+          <p id="res-visual" class="text-sm text-stone-400 mt-1 leading-relaxed">—</p>
+        </div>
+        <button id="btn-force-generate" class="hidden text-xs text-stone-400 underline underline-offset-4 hover:text-stone-200">Generate image anyway</button>
+      </div>
+    </section>
+
+    <!-- ============ RIGHT: Visual Representation ============ -->
+    <section class="bg-[#0f1412] p-6 lg:p-8 flex flex-col gap-5">
+      <h2 class="text-xs uppercase tracking-[0.18em] text-stone-500">Visual Representation</h2>
+
+      <div id="image-frame" class="relative aspect-square w-full max-w-[720px] mx-auto rounded-2xl bg-[#151b18] border border-white/5 overflow-hidden flex items-center justify-center">
+        <div id="image-empty" class="text-center text-stone-600 px-6">
+          <div class="text-5xl mb-3">🐦</div>
+          <p class="text-sm">The generated bird will appear here.</p>
+        </div>
+        <div id="image-loading" class="hidden absolute inset-0 shimmer flex items-end justify-center pb-6">
+          <p class="text-sm text-stone-400">Gemini is painting… <span id="gen-timer">0</span>s</p>
+        </div>
+        <img id="bird-image" alt="Generated bird" class="hidden w-full h-full object-contain" />
+      </div>
+
+      <div class="flex flex-wrap gap-3 justify-center">
+        <button id="btn-regenerate" disabled class="inline-flex items-center gap-2 rounded-xl border border-white/10 hover:border-white/25 px-4 py-2.5 text-sm transition disabled:opacity-40 disabled:cursor-not-allowed">🔄 Regenerate</button>
+        <button id="btn-download" disabled class="inline-flex items-center gap-2 rounded-xl bg-stone-200 text-[#0f1412] font-semibold hover:bg-white px-4 py-2.5 text-sm transition disabled:opacity-40 disabled:cursor-not-allowed">⬇️ Download Image</button>
+      </div>
+
+      <details id="metadata" class="max-w-[720px] w-full mx-auto rounded-2xl bg-[#151b18] border border-white/5 group">
+        <summary class="cursor-pointer select-none list-none px-5 py-3 flex items-center gap-2 text-sm text-stone-400 hover:text-stone-200">
+          <span class="chev transition-transform">▸</span> Generation metadata
+        </summary>
+        <div class="px-5 pb-5 space-y-4 text-sm">
+          <div>
+            <div class="flex items-center justify-between">
+              <p class="text-xs uppercase tracking-wider text-stone-500">Prompt</p>
+              <button data-copy="meta-prompt" class="text-xs text-stone-500 hover:text-stone-200">Copy</button>
+            </div>
+            <pre id="meta-prompt" class="mt-1 whitespace-pre-wrap break-words font-mono text-xs text-stone-300 bg-black/20 rounded-lg p-3">—</pre>
+          </div>
+          <div>
+            <div class="flex items-center justify-between">
+              <p class="text-xs uppercase tracking-wider text-stone-500">Avoid (negative prompt)</p>
+              <button data-copy="meta-negative" class="text-xs text-stone-500 hover:text-stone-200">Copy</button>
+            </div>
+            <pre id="meta-negative" class="mt-1 whitespace-pre-wrap break-words font-mono text-xs text-stone-400 bg-black/20 rounded-lg p-3">—</pre>
+          </div>
+          <dl id="meta-params" class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-xs"></dl>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <script>window.API_BASE = window.API_BASE || "";</script>
+  <script src="app.js"></script>
+</body>
+</html>
